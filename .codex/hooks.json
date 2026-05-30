@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "hooks": {
+    "UserPromptSubmit": {
+      "command": ["python", "-m", "hooks.user_prompt_submit"],
+      "enabled": true,
+      "description": "Injects Wiki files (HOME, RULES, CURRENT_TASK, JUDGE) into Codex prompts as additionalContext."
+    },
+    "PreToolUse": {
+      "command": ["python", "-m", "hooks.pre_tool_guard"],
+      "enabled": true,
+      "description": "Intercepts tool invocations; blocks commands matching the denylist (rm -rf, sudo, git reset --hard, etc.)."
+    },
+    "StopJudge": {
+      "command": ["python", "-m", "hooks.stop_judge"],
+      "enabled": true,
+      "description": "On turn stop, reads last assistant message and writes verdict to Wiki (default: human_review)."
+    }
+  }
+}
