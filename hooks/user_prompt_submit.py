@@ -46,7 +46,7 @@ def user_prompt_submit(turn_payload):
         context = _read_file(PRIMARY_FILE)
         ctx_append = _read_file(LATEST_CTX_FILE)
         if ctx_append is not None:
-            context += "\n\n--- Latest Judge Context ---\n" + ctx_append
+            context += "\n--- Latest Judge Context ---\n" + ctx_append
     else:
         parts = []
         for fname in FALLBACK_FILES:
