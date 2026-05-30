@@ -28,3 +28,12 @@
 ## 验证日期
 - 验证时间：2026-05-31
 - hooks.json group 包装层：保留（待 Codex 真实环境验证，不触发时再调整）
+
+## Codex Hook 启用验证
+- hooks.json 位置：已添加到全局 ~/.codex/hooks.json
+- UserPromptSubmit：已添加到全局 hooks 配置，需要 Codex 重新加载后触发
+- PreToolUse：已添加到全局 hooks 配置（仅匹配 Bash 工具），需要 Codex 重新加载后触发
+- Stop：已添加到全局 hooks 配置，需要 Codex 重新加载后触发
+- hooks.state 已重置，Codex 下次启动时会重新验证和信任 hooks
+- hooks.json 修改方式：追加到全局配置，非项目级配置
+- 需要手动验证：在 Codex 客户端中新建 Codex-WikiGuard 项目的 session，观察 hooks 是否触发
