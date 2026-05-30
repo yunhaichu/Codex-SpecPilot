@@ -1,6 +1,7 @@
 """UserPromptSubmit hook — injects short context into Codex prompts.
 
 优先注入 INJECTION.md；如果不存在，回退到 HOME/RULES/CURRENT_TASK/JUDGE。
+如果 latest_context.md 存在，会追加在 INJECTION.md 之后。
 输出限制最大长度，避免本地模型上下文溢出。
 """
 import json
@@ -13,6 +14,7 @@ WIKI_DIR = os.path.join(
 )
 
 PRIMARY_FILE = "INJECTION.md"
+LATEST_CTX_FILE = "latest_context.md"
 FALLBACK_FILES = ["HOME.md", "RULES.md", "CURRENT_TASK.md", "JUDGE.md"]
 MAX_CONTEXT_CHARS = 6000
 
@@ -20,7 +22,7 @@ MAX_CONTEXT_CHARS = 6000
 def _read_file(rel_path):
     path = os.path.join(WIKI_DIR, rel_path)
     if not os.path.isfile(path):
-        return f"[MISSING: {rel_path}]"
+        return None
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -37,10 +39,14 @@ def user_prompt_submit(turn_payload):
     """Called before every user prompt.
 
     Returns the Codex wire-format response with additionalContext.
-    Prefers INJECTION.md; falls back to legacy files.
+    Prefers INJECTION.md; falls back to legacy files if INJECTION.md is missing.
+    Appends latest_context.md after INJECTION.md if present.
     """
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
+        ctx_append = _read_file(LATEST_CTX_FILE)
+        if ctx_append is not None:
+            context += "\n\n--- Latest Judge Context ---\n" + ctx_append
     else:
         parts = []
         for fname in FALLBACK_FILES:

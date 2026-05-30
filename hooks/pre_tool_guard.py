@@ -6,11 +6,13 @@ Intercepts Bash tool invocations and checks:
 3. Protected directories (deploy, migrations, .ssh, etc.)
 
 Returns permissionDecision=deny on match, {} on pass.
+On deny, appends a log line to .project_wiki/guard_log.jsonl.
 """
 import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 
 # --- Denylist patterns ---
 DENYLIST = [
@@ -68,6 +70,25 @@ WRITE_OP_PATTERNS = [re.compile(p) for p in WRITE_OPS]
 
 REASON_TEMPLATE = "Blocked by Codex-WikiGuard: {}"
 
+# Guard log path
+WIKI_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ".project_wiki"
+)
+GUARD_LOG = os.path.join(WIKI_DIR, "guard_log.jsonl")
+
+
+def _log_deny(command, reason):
+    """Append a deny entry to guard_log.jsonl."""
+    os.makedirs(WIKI_DIR, exist_ok=True)
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "command": command,
+        "reason": reason,
+    }
+    with open(GUARD_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
 
 def _has_protected_target(command):
     """Check if command targets a protected file or dir with a risky write op."""
@@ -121,25 +142,29 @@ def pre_tool_use(turn_payload):
     for pattern in DENY_PATTERNS:
         if pattern.search(command):
             matched = pattern.pattern
+            reason = REASON_TEMPLATE.format(
+                f"command matches denylist pattern '{matched}'"
+            )
+            _log_deny(command, reason)
             return {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": REASON_TEMPLATE.format(
-                        f"command matches denylist pattern '{matched}'"
-                    ),
+                    "permissionDecisionReason": reason,
                 }
             }
 
     # 2. Check protected files/dirs with write ops
     if _has_protected_target(command):
+        reason = REASON_TEMPLATE.format(
+            "command targets protected file/dir with risky write operation"
+        )
+        _log_deny(command, reason)
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": REASON_TEMPLATE.format(
-                    "command targets protected file/dir with risky write operation"
-                ),
+                "permissionDecisionReason": reason,
             }
         }
 

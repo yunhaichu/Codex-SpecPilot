@@ -16,35 +16,36 @@
 
 | Hook | Codex 事件名 | 触发时机 | 功能 |
 |------|-------------|----------|------|
-| **UserPromptSubmit** | `UserPromptSubmit` | 每次用户 Prompt 发送前 | 注入 INJECTION.md（短上下文） |
-| **PreToolUse** | `PreToolUse` | Bash 工具调用前 | 拦截危险命令和受保护文件操作 |
+| **UserPromptSubmit** | `UserPromptSubmit` | 每次用户 Prompt 发送前 | 注入 INJECTION.md；存在时追加 latest_context.md |
+| **PreToolUse** | `PreToolUse` | Bash 工具调用前 | 拦截危险命令和受保护文件操作；deny 时追加 guard_log.jsonl |
 | **StopJudge** | `Stop` | Codex Turn 结束时 | 写入 JUDGE.md / latest_context.md / judge_latest.json |
 
 ## 目录结构
 
 ```
 .project_wiki/
-    HOME.md             — 项目主页
-    RULES.md            — 规则和 Hook 契约
-    CURRENT_TASK.md     — 当前任务
-    DECISIONS.md        — 决策记录
-    REJECTED.md         — 被拒绝的方案
-    PROGRESS.md         — 进度跟踪
-    ISSUES.md           — 问题追踪
-    HOOKS.md            — Hook 文档
-    JUDGE.md            — StopJudge 完整审计记录（含完整 assistant message）
-    latest_context.md   — StopJudge 生成的短状态摘要（供机器读取，不注入）
-    judge_latest.json  — JSON 格式最新判断
-    INJECTION.md        — 优先注入给 Codex 的短上下文文件
+    HOME.md              — 项目主页
+    RULES.md             — 规则和 Hook 契约
+    CURRENT_TASK.md      — 当前任务
+    DECISIONS.md         — 决策记录
+    REJECTED.md          — 被拒绝的方案
+    PROGRESS.md          — 进度跟踪
+    ISSUES.md            — 问题追踪
+    HOOKS.md             — Hook 文档
+    JUDGE.md             — StopJudge 完整审计记录（含完整 assistant message）
+    latest_context.md    — StopJudge 生成的短状态摘要
+    judge_latest.json   — JSON 格式最新判断
+    INJECTION.md         — 优先注入给 Codex 的短上下文文件
+    guard_log.jsonl     — PreToolUse deny 时的追加日志
 
 hooks/
-     __init__.py
-    user_prompt_submit.py    — UserPromptSubmit 事件钩子
-    pre_tool_guard.py        — PreToolUse 事件钩子（仅匹配 Bash）
-    stop_judge.py            — Stop 事件钩子
+      __init__.py
+    user_prompt_submit.py     — UserPromptSubmit 事件钩子
+    pre_tool_guard.py         — PreToolUse 事件钩子（仅匹配 Bash）
+    stop_judge.py             — Stop 事件钩子
 
 .codex/
-    hooks.json               — Codex Hook 配置
+    hooks.json                — Codex Hook 配置
 
 README.md
 ```
@@ -53,10 +54,10 @@ README.md
 
 使用 qwen3.6:35b-a3b-coding-mxfp8 等本地模型时，Hook 行为做了专门优化：
 
-- **UserPromptSubmit** 优先注入 INJECTION.md（短文本），而不是全量 Wiki。
+- **UserPromptSubmit** 优先注入 INJECTION.md（短文本），存在时追加 latest_context.md；不注入完整 JUDGE.md。
 - **JUDGE.md** 是人类审计文件，默认不注入到模型上下文。
 - **StopJudge** 生成 latest_context.md 作为短状态摘要，不回流完整 assistant message。
-- **PreToolUse** 采用确定性规则（denylist + 受保护文件/目录检查），不依赖模型判断。
+- **PreToolUse** 采用确定性规则（denylist + 受保护文件/目录检查），deny 时追加 guard_log.jsonl；不依赖模型判断。
 - 第一版仍然不自动 continue。
 
 ## 配置 Codex
@@ -72,10 +73,10 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/hooks"
 > 如果 Hook 不触发，可尝试去掉 `group`，直接将 `matcher` + `hooks` 放在事件名下：
 > ```json
 > "UserPromptSubmit": [
->   {
->     "matcher": {},
->     "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
->   }
+>    {
+>      "matcher": {},
+>      "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
+>    }
 > ]
 > ```
 
@@ -118,7 +119,7 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 ## Wire Format 约定
 
 - **UserPromptSubmit** 返回：`{ "hookSpecificOutput": { "hookEventName": "UserPromptSubmit", "additionalContext": "..." } }`
-- **PreToolUse** 命中拦截规则返回：`{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..." } }`；未命中返回 `{}`
+- **PreToolUse** 命中拦截规则返回：`{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..." } }`；未命中返回 `{}`；deny 时追加 guard_log.jsonl
 - **Stop** 返回：`{ "systemMessage": "Codex-WikiGuard wrote human_review judgment." }`
 
 ## 设计约束

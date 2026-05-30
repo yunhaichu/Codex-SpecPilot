@@ -1,0 +1,2 @@
+{"timestamp": "2026-05-30T19:58:26.973884+00:00", "command": "rm -rf /tmp/x", "reason": "Blocked by Codex-WikiGuard: command matches denylist pattern 'rm\\s+-rf\\b'"}
+{"timestamp": "2026-05-30T19:58:26.993897+00:00", "command": "echo x > .env", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
