@@ -60,3 +60,12 @@
 - hooks.json 已正确配置到全局配置文件
 - hooks.state 已重置，Codex 下次启动时会重新信任
 - 不需要额外修改格式
+
+## Hook 格式修复（2026-05-31）
+- 问题：Codex 报错 "invalid type: map, expected a string"（matcher 不能是 map）
+- 问题：Codex 报错 "invalid type: map, expected a sequence"（事件名下不能是 group map）
+- 修复：
+     * `~/.codex/hooks.json`：所有 matcher 从 {} 改为 ""
+     * `.codex/hooks.json`：移除 group 包装，事件名直接指向数组
+- 验证：两个 hooks.json 均通过格式校验
+- 状态：等待 Codex 重新加载后验证触发
