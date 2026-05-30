@@ -17,7 +17,18 @@
 - AUTO_CONTINUE: disabled
 
 ## Local Model Mode
-- Backend model: qwen3.6:35b-a3b-coding-mxfp8
+- Backend model: 使用 Codex 默认模型（codex exec，不传 -m）。
 - Use short, explicit instructions.
 - Prefer deterministic rules over model judgment.
 - Do not rely on hidden reasoning or implicit context.
+
+## Real Workflow
+1. 用户先通过与 AI 对话确认项目需求。
+2. AI 按模板整理成 PROJECT_SPEC.md。
+3. 用户打开 Codex，在项目目录输入"开始工作"。
+4. Codex 根据 PROJECT_SPEC.md 自动开发。
+5. Hook 使用当前 Codex 默认模型监督 Codex。
+6. 开发期间用户原则上不介入。
+7. 如果没完成，Stop Hook 可以要求 Codex 继续。
+8. 如果方向偏了，Stop Hook 可以要求 Codex 纠偏。
+9. 如果全部完成，Codex 结束工作并提交结果。

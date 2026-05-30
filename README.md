@@ -7,7 +7,6 @@
 - 只做规则读取、文件写入、简单 JSON 输出和危险命令匹配。
 - **不是**完整 Guardrails Harness。
 - 不引入任何外部依赖，仅用 Python 标准库。
-- 第一版不调用 LLM。
 - Hook 输出遵循 Codex 官方 wire format（`hookSpecificOutput`、`systemMessage`）。
 
 **不做的**：多 Agent、图数据库、RAG、外层调度平台、Subagent、PostToolUse、PreCompact。
@@ -16,49 +15,70 @@
 
 | Hook | Codex 事件名 | 触发时机 | 功能 |
 |------|-------------|----------|------|
-| **UserPromptSubmit** | `UserPromptSubmit` | 每次用户 Prompt 发送前 | 注入 INJECTION.md；存在时追加 latest_context.md |
-| **PreToolUse** | `PreToolUse` | Bash 工具调用前 | 拦截危险命令和受保护文件操作；deny 时追加 guard_log.jsonl |
-| **StopJudge** | `Stop` | Codex Turn 结束时 | 写入 JUDGE.md / latest_context.md / judge_latest.json |
+| **UserPromptSubmit** | `UserPromptSubmit` | 每次用户 Prompt 发送前 | 调用 codex exec（默认模型）生成短上下文；失败时回退到 INJECTION.md |
+| **PreToolUse** | `PreToolUse` | Bash 工具调用前 | 硬规则（denylist + 受保护文件）优先；未命中则调用 codex exec 软判断 |
+| **StopJudge** | `Stop` | Codex Turn 结束时 | 调用 codex exec 做判断，写入 JUDGE.md / latest_context.md / judge_latest.json |
 
 ## 目录结构
 
 ```
 .project_wiki/
-    HOME.md              — 项目主页
-    RULES.md             — 规则和 Hook 契约
-    CURRENT_TASK.md      — 当前任务
-    DECISIONS.md         — 决策记录
-    REJECTED.md          — 被拒绝的方案
-    PROGRESS.md          — 进度跟踪
-    ISSUES.md            — 问题追踪
-    HOOKS.md             — Hook 文档
-    JUDGE.md             — StopJudge 完整审计记录（含完整 assistant message）
-    latest_context.md    — StopJudge 生成的短状态摘要
-    judge_latest.json   — JSON 格式最新判断
-    INJECTION.md         — 优先注入给 Codex 的短上下文文件
-    guard_log.jsonl     — PreToolUse deny 时的追加日志
+    HOME.md                 — 项目主页
+    RULES.md                — 规则和 Hook 契约
+    CURRENT_TASK.md         — 当前任务
+    DECISIONS.md            — 决策记录
+    REJECTED.md             — 被拒绝的方案
+    PROGRESS.md             — 进度跟踪
+    ISSUES.md               — 问题追踪
+    HOOKS.md                — Hook 文档
+    PROJECT_SPEC_TEMPLATE.md — PROJECT_SPEC 模板
+    PROJECT_SPEC.md         — 项目需求规格（由 AI 生成）
+    JUDGE.md                — StopJudge 完整审计记录（含完整 assistant message）
+    latest_context.md       — StopJudge 生成的短状态摘要
+    judge_latest.json      — JSON 格式最新判断
+    loop_state.json        — 自动继续循环计数
+    INJECTION.md            — 优先注入给 Codex 的短上下文文件
+    guard_log.jsonl        — PreToolUse deny 时的追加日志
 
 hooks/
-      __init__.py
-    user_prompt_submit.py     — UserPromptSubmit 事件钩子
-    pre_tool_guard.py         — PreToolUse 事件钩子（仅匹配 Bash）
-    stop_judge.py             — Stop 事件钩子
+        __init__.py
+    codex_client.py         — codex exec 调用封装（默认模型）
+    user_prompt_submit.py   — UserPromptSubmit 事件钩子
+    pre_tool_guard.py       — PreToolUse 事件钩子（仅匹配 Bash）
+    stop_judge.py           — Stop 事件钩子
+
+tests/
+    smoke_test.py           — 冒烟测试
 
 .codex/
-    hooks.json                — Codex Hook 配置
+    hooks.json              — Codex Hook 配置
 
 README.md
 ```
 
-## Local Model Mode
+## v0.2 变化
 
-使用 qwen3.6:35b-a3b-coding-mxfp8 等本地模型时，Hook 行为做了专门优化：
+- v0.1 是纯规则 smoke test。
+- v0.2 开始，Hook 可以调用当前 Codex 默认模型（通过 `codex exec`，不传 `-m`）。
+- 不需要单独设置模型或 LLM API endpoint。
+- Hook 通过 `codex exec` 调用默认 Codex。
+- 为避免递归，子进程设置 `CODEX_WIKIGUARD_CHILD=1`。
+- 子 Codex 不会触发 WikiGuard 判断。
+- PreToolUse：硬规则优先，软判断由默认 Codex 完成。
+- Stop：默认 Codex 判断 pass / continue / revise / done / human_review。
+- 自动 continue 最多 3 次，超过强制 human_review。
 
-- **UserPromptSubmit** 优先注入 INJECTION.md（短文本），存在时追加 latest_context.md；不注入完整 JUDGE.md。
-- **JUDGE.md** 是人类审计文件，默认不注入到模型上下文。
-- **StopJudge** 生成 latest_context.md 作为短状态摘要，不回流完整 assistant message。
-- **PreToolUse** 采用确定性规则（denylist + 受保护文件/目录检查），deny 时追加 guard_log.jsonl；不依赖模型判断。
-- 第一版仍然不自动 continue。
+## 真实工作流
+
+1. 用户先通过与 AI 对话确认项目需求。
+2. AI 按模板（PROJECT_SPEC_TEMPLATE.md）整理成 PROJECT_SPEC.md。
+3. 用户打开 Codex，在项目目录输入"开始工作"。
+4. Codex 根据 PROJECT_SPEC.md 自动开发。
+5. Hook 使用当前 Codex 默认模型监督 Codex。
+6. 开发期间用户原则上不介入。
+7. 如果没完成，Stop Hook 可以要求 Codex 继续（最多 3 次）。
+8. 如果方向偏了，Stop Hook 可以要求 Codex 纠偏。
+9. 如果全部完成，Codex 结束工作并提交结果。
 
 ## 配置 Codex
 
@@ -73,10 +93,10 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/hooks"
 > 如果 Hook 不触发，可尝试去掉 `group`，直接将 `matcher` + `hooks` 放在事件名下：
 > ```json
 > "UserPromptSubmit": [
->    {
->      "matcher": {},
->      "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
->    }
+>      {
+>        "matcher": {},
+>        "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
+>      }
 > ]
 > ```
 
@@ -84,6 +104,9 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/hooks"
 
 ```bash
 cd /path/to/Codex-WikiGuard
+
+# 运行冒烟测试
+python3 tests/smoke_test.py
 
 # UserPromptSubmit（空输入）
 echo '{}' | python -m hooks.user_prompt_submit
@@ -120,19 +143,19 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 
 - **UserPromptSubmit** 返回：`{ "hookSpecificOutput": { "hookEventName": "UserPromptSubmit", "additionalContext": "..." } }`
 - **PreToolUse** 命中拦截规则返回：`{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..." } }`；未命中返回 `{}`；deny 时追加 guard_log.jsonl
-- **Stop** 返回：`{ "systemMessage": "Codex-WikiGuard wrote human_review judgment." }`
+- **Stop** 返回：`{ "systemMessage": "Codex-WikiGuard wrote ... judgment." }`
 
 ## 设计约束
 
 1. **最小可用**：不做复杂 Harness、不做多 Agent。
 2. **标准库**：Python 内置模块即可，零外部依赖。
-3. **保守判断**：Stop 事件默认 `systemMessage`，不返回 `decision: block`，不自动 continue。
+3. **保守判断**：Stop 事件不返回 `decision: block`，不自动 continue（除非 codex exec 明确允许且不超过 3 次）。
 4. **不实现**：Subagent、PostToolUse、PreCompact、run_task.py。
-5. **无 LLM**：第一版纯规则引擎，不调用大模型。
-6. **本地模型友好**：注入上下文短、硬规则优先、JUDGE.md 不回流污染。
+5. **不写死模型名**：Hook 通过 `codex exec` 调用默认模型，不传 `-m`。
+6. **递归保护**：子进程设置 `CODEX_WIKIGUARD_CHILD=1`，不触发 WikiGuard 判断。
 
 ## 后续方向
 
-- 稳定后开启 `continue` verdict 自动循环
 - 扩展 denylist / 受保护文件列表
 - 增加 Hook 日志和审计功能
+- 优化 codex exec prompt 以提高判断质量
