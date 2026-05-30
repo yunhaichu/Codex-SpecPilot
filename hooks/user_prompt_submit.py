@@ -1,12 +1,17 @@
 """UserPromptSubmit hook — injects short context into Codex prompts.
 
-优先注入 INJECTION.md；如果不存在，回退到 HOME/RULES/CURRENT_TASK/JUDGE。
-如果 latest_context.md 存在，会追加在 INJECTION.md 之后。
-输出限制最大长度，避免本地模型上下文溢出。
+优先注入 INJECTION.md;如果不存在,回退到 HOME/RULES/CURRENT_TASK/JUDGE。
+如果 latest_context.md 存在,会追加在 INJECTION.md 之后。
+输出限制最大长度,避免本地模型上下文溢出。
 """
 import json
 import os
 import sys
+
+# Recursive guard: skip if child Codex process
+if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+    print(json.dumps({}, indent=2, ensure_ascii=False))
+    sys.exit(0)
 
 WIKI_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -51,7 +56,7 @@ def user_prompt_submit(turn_payload):
         parts = []
         for fname in FALLBACK_FILES:
             content = _read_file(fname)
-            parts.append(f"### {fname} ###\n{content}")
+            parts.append("### %s ###\n%s" % (fname, content))
         context = "\n\n".join(parts)
 
     context = _truncate(context)

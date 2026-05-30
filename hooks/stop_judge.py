@@ -21,6 +21,12 @@ JUDGE_MD = os.path.join(WIKI_DIR, "JUDGE.md")
 LATEST_CTX_MD = os.path.join(WIKI_DIR, "latest_context.md")
 JUDGE_JSON = os.path.join(WIKI_DIR, "judge_latest.json")
 
+
+# Recursive guard: skip if child Codex process
+if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+    print(json.dumps({"systemMessage": "Codex-WikiGuard skipped in child Codex process."}, indent=2, ensure_ascii=False))
+    sys.exit(0)
+
 DEFAULT_VERDICT = "human_review"
 DEFAULT_REASON = "Default conservative judgment in v1."
 NEXT_ACTION = "manual review required before continuing"

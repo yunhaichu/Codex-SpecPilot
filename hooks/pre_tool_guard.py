@@ -15,6 +15,12 @@ import sys
 from datetime import datetime, timezone
 
 # --- Denylist patterns ---
+
+# Recursive guard: skip if child Codex process
+if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+    print(json.dumps({}, indent=2, ensure_ascii=False))
+    sys.exit(0)
+
 DENYLIST = [
     r"rm\s+-rf\b",
     r"\bsudo\b",
