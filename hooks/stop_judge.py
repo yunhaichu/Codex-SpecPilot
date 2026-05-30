@@ -1,8 +1,11 @@
 """StopJudge hook — writes judgment on turn stop.
 
-Reads last_assistant_message from the stop payload,
-writes to .project_wiki/JUDGE.md and .project_wiki/judge_latest.json.
-Returns a minimal systemMessage in Codex wire format.
+Writes to three files:
+  - JUDGE.md        (human audit, includes full assistant message)
+  - latest_context.md (short summary, NOT injected into next prompt)
+  - judge_latest.json (machine-readable)
+
+Returns only a systemMessage. No decision: block. No auto-continue.
 """
 import json
 import os
@@ -11,13 +14,16 @@ from datetime import datetime, timezone
 
 WIKI_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-     ".project_wiki"
+    ".project_wiki"
 )
 
 JUDGE_MD = os.path.join(WIKI_DIR, "JUDGE.md")
+LATEST_CTX_MD = os.path.join(WIKI_DIR, "latest_context.md")
 JUDGE_JSON = os.path.join(WIKI_DIR, "judge_latest.json")
 
 DEFAULT_VERDICT = "human_review"
+DEFAULT_REASON = "Default conservative judgment in v1."
+NEXT_ACTION = "manual review required before continuing"
 
 
 def _read_file(path):
@@ -54,11 +60,25 @@ def _write_md(verdict, reason, assistant_msg, history):
         f.write(md)
 
 
+def _write_context_md(verdict, reason):
+    md = f"""# Latest Judge Context
+
+VERDICT: {verdict}
+AUTO_CONTINUE: disabled
+NEXT_ACTION: {NEXT_ACTION}
+REASON: {reason}
+"""
+    with open(LATEST_CTX_MD, "w", encoding="utf-8") as f:
+        f.write(md)
+
+
 def _write_json(verdict, reason):
     data = {
         "last_verdict": verdict,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "reason": reason,
+        "auto_continue": False,
+        "next_action": NEXT_ACTION,
     }
     with open(JUDGE_JSON, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
@@ -77,7 +97,7 @@ def stop_judge(turn_payload):
         )
 
     verdict = DEFAULT_VERDICT
-    reason = "Default verdict: manual review required before continuing (v1 conservative)."
+    reason = DEFAULT_REASON
 
     # Read existing history from JUDGE.md
     history = []
@@ -94,6 +114,7 @@ def stop_judge(turn_payload):
             history = lines[:10]
 
     _write_md(verdict, reason, assistant_msg, history)
+    _write_context_md(verdict, reason)
     _write_json(verdict, reason)
 
     return {

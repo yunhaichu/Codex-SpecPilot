@@ -1,13 +1,18 @@
-"""PreToolUse hook — blocks dangerous commands.
+"""PreToolUse hook — blocks dangerous commands and protected file operations.
 
-Intercepts Bash tool invocations and checks the command string against
-a fixed denylist. Returns permissionDecision=deny for dangerous patterns.
+Intercepts Bash tool invocations and checks:
+1. Command denylist (rm -rf, sudo, git reset --hard, etc.)
+2. Protected file names (env, pem, key, secrets, etc.)
+3. Protected directories (deploy, migrations, .ssh, etc.)
+
+Returns permissionDecision=deny on match, {} on pass.
 """
 import json
 import os
 import re
 import sys
 
+# --- Denylist patterns ---
 DENYLIST = [
     r"rm\s+-rf\b",
     r"\bsudo\b",
@@ -21,15 +26,76 @@ DENYLIST = [
 
 DENY_PATTERNS = [re.compile(p) for p in DENYLIST]
 
-REASON_TEMPLATE = "Blocked by Codex-WikiGuard: command matches denylist pattern '{}'"
+# --- Protected file name patterns ---
+PROTECTED_FILES = [
+    r"\.env\b",
+    r"\.env\.",
+    r"\.pem\b",
+    r"\.key\b",
+    r"\bid_rsa\b",
+    r"\bid_ed25519\b",
+    r"secrets\.",
+    r"credentials\.",
+    r"docker-compose\.yml\b",
+]
+PROTECTED_FILE_PATTERNS = [re.compile(p) for p in PROTECTED_FILES]
+
+# --- Protected directory/path fragments ---
+PROTECTED_PATHS = [
+    "deploy/",
+    "deployment/",
+    "migrations/",
+    "migration/",
+    "schema/",
+    ".ssh/",
+    ".github/workflows/",
+]
+
+# --- High-risk write/modify keywords ---
+WRITE_OPS = [
+    r"\brm\b",
+    r"\bmv\b",
+    r"\bcp\b",
+    r">>",
+    r">",
+    r"\btee\b",
+    r"\bsed\s+-i\b",
+    r"\bperl\s+-pi\b",
+    r"\bpython\s+-c\b",
+    r"\bpython3\s+-c\b",
+]
+WRITE_OP_PATTERNS = [re.compile(p) for p in WRITE_OPS]
+
+REASON_TEMPLATE = "Blocked by Codex-WikiGuard: {}"
+
+
+def _has_protected_target(command):
+    """Check if command targets a protected file or dir with a risky write op."""
+    # Check for write operations
+    has_write = any(p.search(command) for p in WRITE_OP_PATTERNS)
+    if not has_write:
+        return False
+
+    # Check protected files
+    for pat in PROTECTED_FILE_PATTERNS:
+        if pat.search(command):
+            return True
+
+    # Check protected paths (substring match, case-sensitive)
+    for protected in PROTECTED_PATHS:
+        if protected in command:
+            return True
+
+    return False
 
 
 def pre_tool_use(turn_payload):
     """Called before every tool invocation.
 
-    Returns the Codex wire-format response.
-    On denylist match: permissionDecision="deny" with reason.
-    On no match: empty dict (allow through).
+    Returns:
+        Denylist hit: { "hookSpecificOutput": { ..., "permissionDecision": "deny", ... } }
+        Protected file hit: same format
+        Pass: {}
     """
     # Extract command from Codex wire format
     tool_input = turn_payload.get("tool_input", {})
@@ -51,6 +117,7 @@ def pre_tool_use(turn_payload):
                 arguments = {}
         command = arguments.get("command", "") or ""
 
+    # 1. Check denylist
     for pattern in DENY_PATTERNS:
         if pattern.search(command):
             matched = pattern.pattern
@@ -58,9 +125,23 @@ def pre_tool_use(turn_payload):
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": REASON_TEMPLATE.format(matched),
+                    "permissionDecisionReason": REASON_TEMPLATE.format(
+                        f"command matches denylist pattern '{matched}'"
+                    ),
                 }
             }
+
+    # 2. Check protected files/dirs with write ops
+    if _has_protected_target(command):
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": REASON_TEMPLATE.format(
+                    "command targets protected file/dir with risky write operation"
+                ),
+            }
+        }
 
     # No match — allow
     return {}

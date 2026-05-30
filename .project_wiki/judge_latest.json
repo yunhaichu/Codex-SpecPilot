@@ -1,5 +1,7 @@
 {
   "last_verdict": "human_review",
-  "timestamp": "2026-05-30T19:43:15.803499+00:00",
-  "reason": "Default verdict: manual review required before continuing (v1 conservative)."
+  "timestamp": "2026-05-30T19:47:33.757263+00:00",
+  "reason": "Default conservative judgment in v1.",
+  "auto_continue": false,
+  "next_action": "manual review required before continuing"
 }
