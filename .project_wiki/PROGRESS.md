@@ -37,3 +37,26 @@
 - hooks.state 已重置，Codex 下次启动时会重新验证和信任 hooks
 - hooks.json 修改方式：追加到全局配置，非项目级配置
 - 需要手动验证：在 Codex 客户端中新建 Codex-WikiGuard 项目的 session，观察 hooks 是否触发
+
+## Codex Hook 启用
+- 修改文件：`~/.codex/hooks.json`（追加 WikiGuard 钩子）
+- 未修改：项目级 `.codex/hooks.json`（保持原样）
+- hooks.state：已重置（Codex 下次 session 会重新验证）
+- Hook 已启用：是
+  - UserPromptSubmit: wiki-guard-user-prompt (cwd=项目根目录)
+  - PreToolUse: 仅匹配 Bash 工具
+  - Stop: 追加到现有 Stop 钩子列表
+
+## 下一步验证（需在 Codex 客户端操作）
+1. 在 Codex 客户端中打开 Codex-WikiGuard 项目
+2. 发送：`只回复：wiki guard injection test`
+   → 观察状态栏是否显示 "Codex-WikiGuard: injecting wiki context"
+3. 要求执行：`echo x > .env`
+   → 观察是否被 PreToolUse 拦截，查看 .project_wiki/guard_log.jsonl
+4. 发送：`只回复：stop hook test complete，不改文件`
+   → 回合结束后检查 JUDGE.md、latest_context.md、judge_latest.json
+
+## 未修改 hooks.json 原因
+- hooks.json 已正确配置到全局配置文件
+- hooks.state 已重置，Codex 下次启动时会重新信任
+- 不需要额外修改格式
