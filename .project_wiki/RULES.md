@@ -5,37 +5,44 @@
 1. Hooks run inside Codex; they are **not** a replacement for the LLM.
 2. Keep everything simple — rules-based, file I/O, JSON output only.
 3. Do NOT implement Subagent, PostToolUse, PreCompact, or `run_task.py` in v1.
+4. All hooks follow Codex official wire format (`hookSpecificOutput`, `systemMessage`).
 
 ## Hook contracts
 
 ### UserPromptSubmit
 
+- **Codex Event**: `UserPromptSubmit`
 - **Trigger**: Before every user prompt is sent to Codex.
 - **Read**: HOME.md, RULES.md, CURRENT_TASK.md, JUDGE.md.
-- **Output**: `additionalContext` field in the hook response.
+- **Output**: `{ "hookSpecificOutput": { "hookEventName": "UserPromptSubmit", "additionalContext": "..." } }`
 - **No compression** — raw file contents only.
 
 ### PreToolUse
 
-- **Trigger**: Before every tool invocation from Codex.
-- **Check**: Command string against a fixed denylist.
-- **Action**: If matched, return `approved: false` with a reason.
+- **Codex Event**: `PreToolUse`
+- **Matcher**: `{"tool": "^Bash$"}` (only triggers on Bash tool calls)
+- **Trigger**: Before every Bash tool invocation from Codex.
+- **Input**: `turn_payload["tool_input"]["command"]` (fallback to `arguments.command`)
+- **Denylist match**: return `{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..." } }`
+- **No match**: return `{}` (allow through)
 - **Denylist** (first version):
-   - `rm -rf`
-   - `sudo`
-   - `git reset --hard`
-   - `git clean -fd`
-   - `chmod -R`
-   - `chown -R`
-   - `curl | sh`
-   - `wget | sh`
+    - `rm -rf`
+    - `sudo`
+    - `git reset --hard`
+    - `git clean -fd`
+    - `chmod -R`
+    - `chown -R`
+    - `curl | sh`
+    - `wget | sh`
 
-### StopJudge
+### Stop
 
-- **Trigger**: On Codex `stop` signal (turn ends).
+- **Codex Event**: `Stop`
+- **Trigger**: On Codex turn end (stop signal).
 - **Read**: `last_assistant_message` from the turn payload.
 - **Write**: `JUDGE.md` (human-readable) and `judge_latest.json` (machine-readable).
-- **Default verdict**: `human_review` — no auto-loop yet.
+- **Return**: `{ "systemMessage": "Codex-WikiGuard wrote human_review judgment." }`
+- **Default verdict**: `human_review` — no auto-loop, no `decision: block`.
 
 ## Versioning
 

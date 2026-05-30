@@ -1,13 +1,16 @@
 """UserPromptSubmit hook — injects Wiki files into Codex prompts.
 
 Reads HOME.md, RULES.md, CURRENT_TASK.md, JUDGE.md from .project_wiki/
-and returns them as additionalContext.
+and returns them as additionalContext in the Codex wire format.
 """
 import json
 import os
 import sys
 
-WIKI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".project_wiki")
+WIKI_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+     ".project_wiki"
+)
 
 FILES_TO_INJECT = ["HOME.md", "RULES.md", "CURRENT_TASK.md", "JUDGE.md"]
 
@@ -22,12 +25,8 @@ def _read_file(rel_path):
 
 def user_prompt_submit(turn_payload):
     """Called before every user prompt.
-    
-    Args:
-        turn_payload: dict from Codex with turn metadata.
-    
-    Returns:
-        dict with additionalContext key.
+
+    Returns the Codex wire-format response with additionalContext.
     """
     parts = []
     for fname in FILES_TO_INJECT:
@@ -35,10 +34,23 @@ def user_prompt_submit(turn_payload):
         parts.append(f"### {fname} ###\n{content}")
 
     additional_context = "\n\n".join(parts)
-    return {"additionalContext": additional_context}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": additional_context,
+        }
+    }
 
 
 if __name__ == "__main__":
-    # Allow standalone test
-    result = user_prompt_submit({})
+    stdin_data = sys.stdin.read().strip()
+    if stdin_data:
+        try:
+            payload = json.loads(stdin_data)
+        except json.JSONDecodeError:
+            payload = {}
+    else:
+        payload = {}
+
+    result = user_prompt_submit(payload)
     print(json.dumps(result, indent=2, ensure_ascii=False))
