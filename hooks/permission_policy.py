@@ -6,6 +6,10 @@ Uses Python standard library only. No LLM calls.
 import re
 import os
 import json
+try:
+    from project_paths import wiki_dir
+except ModuleNotFoundError:
+    from hooks.project_paths import wiki_dir
 
 
 def _normalize_path(path):
@@ -140,11 +144,7 @@ def is_always_protected_path(path):
 
 def _get_project_spec_path():
     """Return the path to PROJECT_SPEC.md if it exists."""
-    wiki_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-         ".project_wiki"
-     )
-    path = os.path.join(wiki_dir, "PROJECT_SPEC.md")
+    path = os.path.join(wiki_dir(), "PROJECT_SPEC.md")
     if os.path.isfile(path):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()

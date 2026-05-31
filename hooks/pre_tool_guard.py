@@ -13,14 +13,12 @@ from permission_policy import (load_project_mode, is_supervision_file,
     extract_paths_from_command, extract_paths_from_patch,
     command_has_write_intent)
 from codex_client import call_codex_default
+from project_paths import wiki_dir
 
 REASON_TEMPLATE = "Blocked by Codex-WikiGuard: %s"
 
 # Guard log path
-WIKI_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".project_wiki"
-)
+WIKI_DIR = wiki_dir()
 GUARD_LOG = os.path.join(WIKI_DIR, "guard_log.jsonl")
 PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
 

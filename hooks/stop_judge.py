@@ -3,12 +3,12 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from codex_client import call_codex_default
+from project_paths import wiki_dir
 
-WIKI_DIR = str(Path(__file__).resolve().parents[1] / ".project_wiki")
+WIKI_DIR = wiki_dir()
 
 # Recursive guard: child codex exec processes must not judge or write state.
 if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":

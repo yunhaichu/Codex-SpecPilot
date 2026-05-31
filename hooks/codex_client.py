@@ -7,11 +7,12 @@ import json
 import os
 import subprocess
 from datetime import datetime, timezone
+try:
+    from project_paths import wiki_dir
+except ModuleNotFoundError:
+    from hooks.project_paths import wiki_dir
 
-WIKI_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".project_wiki"
-)
+WIKI_DIR = wiki_dir()
 
 LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
 MAX_LOOP_COUNT = 3

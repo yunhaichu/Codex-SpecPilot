@@ -195,12 +195,41 @@ def test_codex_command_profile_inheritance():
             os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
 
 
+def test_project_path_resolution():
+    print("\n[project path resolution]")
+    project_paths = _load_hook_module("project_paths")
+    old_project_dir = os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+    old_cwd = os.getcwd()
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            wiki = os.path.realpath(os.path.join(td, ".project_wiki"))
+            os.mkdir(wiki)
+
+            os.environ["CODEX_WIKIGUARD_PROJECT_DIR"] = td
+            test("project dir env selects target wiki",
+                 project_paths.wiki_dir() == wiki,
+                 project_paths.wiki_dir())
+
+            os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+            os.chdir(td)
+            test("cwd selects target wiki",
+                 project_paths.wiki_dir() == wiki,
+                 project_paths.wiki_dir())
+    finally:
+        os.chdir(old_cwd)
+        if old_project_dir is not None:
+            os.environ["CODEX_WIKIGUARD_PROJECT_DIR"] = old_project_dir
+        else:
+            os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+
+
 def main():
     print("=== Codex-WikiGuard Light Smoke Tests ===")
     test_user_prompt_submit()
     test_pre_tool_guard_light_boundary()
     test_stop_auto_continue_and_done_helpers()
     test_codex_command_profile_inheritance()
+    test_project_path_resolution()
     print("\n=== Results ===")
     print("Passed: %d, Failed: %d" % (PASSED, FAILED))
     return 0 if FAILED == 0 else 1

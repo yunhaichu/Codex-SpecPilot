@@ -131,3 +131,11 @@ Conclusion:
 - Current repository profile inheritance fix does not conflict with the current environment.
 - The legacy profile issue in the previous trial appears to be a stale trial report or stale Codex client/session/config state. Current terminal execution and Hook subprocess execution do not reproduce it.
 - Unrelated warnings observed: invalid YAML in ~/.codex/skills/gpt-researcher/SKILL.md and deprecated [features].codex_hooks.
+
+## unattended loop trial with target project path resolution (2026-05-31)
+- Result: partial real-world verification.
+- Evidence: `codex exec --enable hooks ... -C examples/minimal_supervised_project '开始工作'` completed the minimal calculator task from one user prompt, updated code/tests/README/completion report, and `python run_tests.py` passed with 2 tests.
+- Hook findings: user-level hook state was disabled at first; after temporarily enabling hooks and increasing hook timeout, the run completed. User-level config was restored after the trial.
+- Path finding: hooks must resolve the target project's `.project_wiki`, not the WikiGuard repo's own `.project_wiki`; this run required `CODEX_WIKIGUARD_PROJECT_DIR` / cwd-aware path resolution.
+- Limit: no `JUDGE.md`, `judge_latest.json`, `latest_context.md`, or `loop_state.json` was produced in the example project, so Stop Hook `decision:block` auto-continue is still not real-world verified.
+- Cleanup: example fixture was restored to its unfinished baseline so it remains reusable for future trials.

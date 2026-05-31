@@ -8,10 +8,10 @@ if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
     print(json.dumps({}, indent=2, ensure_ascii=False))
     sys.exit(0)
 
-WIKI_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".project_wiki"
-)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from project_paths import wiki_dir
+
+WIKI_DIR = wiki_dir()
 
 PRIMARY_FILE = "INJECTION.md"
 LATEST_CTX_FILE = "latest_context.md"
