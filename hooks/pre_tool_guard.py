@@ -52,6 +52,22 @@ def _extract_targets(turn_payload):
     command = ""
     file_paths = []
 
+    def collect_from_mapping(data):
+        paths = []
+        patch_texts = []
+
+        for key in ("target_file", "path", "file_path", "filename", "file"):
+            val = data.get(key)
+            if isinstance(val, str):
+                paths.append(val)
+
+        for key in ("patch", "content", "diff", "input", "text"):
+            val = data.get(key)
+            if isinstance(val, str):
+                patch_texts.append(val)
+
+        return paths, patch_texts
+
     tool_input = turn_payload.get("tool_input", {})
     if isinstance(tool_input, str):
         try:
@@ -65,20 +81,14 @@ def _extract_targets(turn_payload):
             command = tool_input.get("command", "")
             if command:
                 file_paths.extend(extract_paths_from_command(command))
+                if tool_name == "apply_patch":
+                    file_paths.extend(extract_paths_from_patch(command))
 
         # Apply patch / Write / Edit: extract from common fields
-        for key in ("target_file", "path", "file_path", "filename", "file"):
-            if key in tool_input:
-                val = tool_input[key]
-                if isinstance(val, str) and val not in file_paths:
-                    file_paths.append(val)
-
-        # Also check patch/content/diff fields
-        for key in ("patch", "content", "diff"):
-            if key in tool_input:
-                val = tool_input[key]
-                if isinstance(val, str):
-                    file_paths.extend(extract_paths_from_patch(val))
+        paths, patch_texts = collect_from_mapping(tool_input)
+        file_paths.extend(paths)
+        for text in patch_texts:
+            file_paths.extend(extract_paths_from_patch(text))
 
         # Fallback: check arguments field too
         if not command:
@@ -89,18 +99,16 @@ def _extract_targets(turn_payload):
                 except json.JSONDecodeError:
                     arguments = {}
             if isinstance(arguments, dict):
-                for key in ("target_file", "path", "file_path", "filename"):
-                    if key in arguments:
-                        val = arguments[key]
-                        if isinstance(val, str) and val not in file_paths:
-                            file_paths.append(val)
-                for key in ("patch", "content", "diff"):
-                    if key in arguments:
-                        val = arguments[key]
-                        if isinstance(val, str):
-                            file_paths.extend(extract_paths_from_patch(val))
+                paths, patch_texts = collect_from_mapping(arguments)
+                file_paths.extend(paths)
+                for text in patch_texts:
+                    file_paths.extend(extract_paths_from_patch(text))
 
-    return tool_name, command, file_paths
+    deduped = []
+    for path in file_paths:
+        if path not in deduped:
+            deduped.append(path)
+    return tool_name, command, deduped
 
 
 def _is_self_dev_allowed_supervision_target(path, project_spec):
@@ -109,9 +117,9 @@ def _is_self_dev_allowed_supervision_target(path, project_spec):
         return False
     normalized = os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
     basename = normalized.rstrip("/").rsplit("/", 1)[-1]
-    if normalized.startswith("hooks/") and normalized.endswith(".py"):
+    if (normalized.startswith("hooks/") or "/hooks/" in normalized) and normalized.endswith(".py"):
         return True
-    if normalized == ".codex/hooks.json":
+    if normalized == ".codex/hooks.json" or normalized.endswith("/.codex/hooks.json"):
         return True
     return basename in {
         "PROJECT_SPEC.md",

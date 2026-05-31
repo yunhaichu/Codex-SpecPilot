@@ -8,6 +8,8 @@
                         "type": "command",
                         "name": "wiki-guard-user-prompt",
                         "command": "python -m hooks.user_prompt_submit",
+                        "commandWindows": "py -3 -m hooks.user_prompt_submit",
+                        "timeout": 10,
                         "enabled": true
                     }
                 ]
@@ -21,6 +23,8 @@
                         "type": "command",
                         "name": "wiki-guard-tool-guard-bash",
                         "command": "python -m hooks.pre_tool_guard",
+                        "commandWindows": "py -3 -m hooks.pre_tool_guard",
+                        "timeout": 10,
                         "enabled": true
                     }
                 ]
@@ -32,6 +36,8 @@
                         "type": "command",
                         "name": "wiki-guard-tool-guard-apply-patch",
                         "command": "python -m hooks.pre_tool_guard",
+                        "commandWindows": "py -3 -m hooks.pre_tool_guard",
+                        "timeout": 10,
                         "enabled": true
                     }
                 ]
@@ -43,6 +49,8 @@
                         "type": "command",
                         "name": "wiki-guard-tool-guard-edit",
                         "command": "python -m hooks.pre_tool_guard",
+                        "commandWindows": "py -3 -m hooks.pre_tool_guard",
+                        "timeout": 10,
                         "enabled": true
                     }
                 ]
@@ -54,6 +62,8 @@
                         "type": "command",
                         "name": "wiki-guard-tool-guard-write",
                         "command": "python -m hooks.pre_tool_guard",
+                        "commandWindows": "py -3 -m hooks.pre_tool_guard",
+                        "timeout": 10,
                         "enabled": true
                     }
                 ]
@@ -67,6 +77,8 @@
                         "type": "command",
                         "name": "wiki-guard-stop-judge",
                         "command": "python -m hooks.stop_judge",
+                        "commandWindows": "py -3 -m hooks.stop_judge",
+                        "timeout": 60,
                         "enabled": true
                     }
                 ]

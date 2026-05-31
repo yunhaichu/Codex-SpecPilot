@@ -93,6 +93,22 @@ def test_pre_tool_guard_light_boundary():
             })
             test("ordinary business write can be AI-allowed", business_result == {})
 
+            real_patch_result = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: src/main.py\n"
+                        "@@\n"
+                        "-old\n"
+                        "+new\n"
+                        "*** End Patch\n"
+                    ),
+                },
+            })
+            test("real apply_patch command payload extracts target",
+                 real_patch_result == {}, real_patch_result)
+
             blocked = pre.pre_tool_use({
                 "tool": "apply_patch",
                 "tool_input": {"target_file": ".project_wiki/JUDGE.md", "patch": ""},
@@ -108,6 +124,44 @@ def test_pre_tool_guard_light_boundary():
             })
             win_decision = win_blocked.get("hookSpecificOutput", {}).get("permissionDecision")
             test("Windows-style judge-system path is blocked", win_decision == "deny", win_blocked)
+
+            self_dev_spec = "# Spec\nwikiguard_self_development\n"
+            with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
+                f.write(self_dev_spec)
+            hook_config_result = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: %s\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ) % os.path.join(ROOT_DIR, ".codex", "hooks.json"),
+                },
+            })
+            test("self-dev absolute hooks.json path is allowed",
+                 hook_config_result == {}, hook_config_result)
+
+            with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
+                f.write("# Spec\nsupervised_project_development\n")
+            protected_patch = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: .project_wiki/JUDGE.md\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ),
+                },
+            })
+            protected_decision = protected_patch.get("hookSpecificOutput", {}).get(
+                "permissionDecision"
+            )
+            test("protected apply_patch command payload is blocked",
+                 protected_decision == "deny", protected_patch)
     finally:
         pre.call_codex_default = old_call
         pre.WIKI_DIR = old_wiki
@@ -195,6 +249,24 @@ def test_codex_command_profile_inheritance():
             os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
 
 
+def test_hooks_json_cross_platform_fields():
+    print("\n[hooks.json]")
+    hooks_path = os.path.join(ROOT_DIR, ".codex", "hooks.json")
+    with open(hooks_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    all_hooks = []
+    for groups in data.get("hooks", {}).values():
+        for group in groups:
+            all_hooks.extend(group.get("hooks", []))
+
+    test("all command hooks include Windows command",
+         all(hook.get("commandWindows") for hook in all_hooks), all_hooks)
+    stop_hooks = data.get("hooks", {}).get("Stop", [])[0].get("hooks", [])
+    test("Stop hook timeout is at least 60 seconds",
+         stop_hooks and stop_hooks[0].get("timeout", 0) >= 60, stop_hooks)
+
+
 def test_project_path_resolution():
     print("\n[project path resolution]")
     project_paths = _load_hook_module("project_paths")
@@ -229,6 +301,7 @@ def main():
     test_pre_tool_guard_light_boundary()
     test_stop_auto_continue_and_done_helpers()
     test_codex_command_profile_inheritance()
+    test_hooks_json_cross_platform_fields()
     test_project_path_resolution()
     print("\n=== Results ===")
     print("Passed: %d, Failed: %d" % (PASSED, FAILED))
