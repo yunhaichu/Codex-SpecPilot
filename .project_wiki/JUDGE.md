@@ -1,18 +1,24 @@
-# Codex-WikiGuard — JUDGE
+# Codex-WikiGuard -- JUDGE
 
 ## Latest Judgment
 
-**Timestamp**: 2026-05-30T20:31:08.830201+00:00
+**Timestamp**: 2026-05-31T02:24:11.265292+00:00
 
 **Verdict**: human_review
 
-**Reason**: Default conservative judgment in v1.
+**Reason**: Default conservative judgment in v2.
 
 ## Assistant Message (last turn)
 
 ```
-stop hook real trigger test complete
+permission test
 ```
+
+## Next Action
+
+| Note | Next action |
+|------|-------------|
+| __none__ |
 
 ## History
 

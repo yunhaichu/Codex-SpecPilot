@@ -11,6 +11,14 @@
 - 禁止只写说明不改代码后声称完成。
 - 每轮必须说明实际修改了哪些文件、做了什么验证。
 
+## Permission Summary (Codex WikiGuard)
+Codex Worker **MUST NOT** modify:
+- .project_wiki/PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, PERMISSIONS.md
+- .project_wiki/JUDGE.md, latest_context.md, judge_latest.json, loop_state.json, guard_log.jsonl
+- .codex/hooks.json, hooks/*.py (除非 project mode 是 wikiguard_self_development 且用户明确要求)
+- .env, secrets, keys, deploy/, schema/, migration/, migrations/
+Only modify files within Allowed Scope in PROJECT_SPEC.md.
+
 ## Latest Judge
 - VERDICT: human_review
 - NEXT_ACTION: wait for user confirmation

@@ -13,9 +13,12 @@ if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
     print(json.dumps({}, indent=2, ensure_ascii=False))
     sys.exit(0)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from permission_policy import get_permission_summary
+
 WIKI_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".project_wiki"
+     ".project_wiki"
 )
 
 PRIMARY_FILE = "INJECTION.md"
@@ -35,8 +38,8 @@ def _read_file(rel_path):
 def _truncate(text):
     if len(text) > MAX_CONTEXT_CHARS:
         return text[:MAX_CONTEXT_CHARS] + (
-            "\n\n[TRUNCATED BY Codex-WikiGuard: injection context exceeded limit]"
-        )
+             "\n\n[TRUNCATED BY Codex-WikiGuard: injection context exceeded limit]"
+         )
     return text
 
 
@@ -46,6 +49,7 @@ def user_prompt_submit(turn_payload):
     Returns the Codex wire-format response with additionalContext.
     Prefers INJECTION.md; falls back to legacy files if INJECTION.md is missing.
     Appends latest_context.md after INJECTION.md if present.
+    Appends permission summary at the end.
     """
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
@@ -59,14 +63,18 @@ def user_prompt_submit(turn_payload):
             parts.append("### %s ###\n%s" % (fname, content))
         context = "\n\n".join(parts)
 
+    # Append permission summary
+    perm_summary = get_permission_summary()
+    context += "\n\n" + perm_summary
+
     context = _truncate(context)
 
     return {
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
-        }
-    }
+         "hookSpecificOutput": {
+             "hookEventName": "UserPromptSubmit",
+             "additionalContext": context,
+         }
+     }
 
 
 if __name__ == "__main__":

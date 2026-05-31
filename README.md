@@ -16,42 +16,44 @@
 | Hook | Codex 事件名 | 触发时机 | 功能 |
 |------|-------------|----------|------|
 | **UserPromptSubmit** | `UserPromptSubmit` | 每次用户 Prompt 发送前 | 调用 codex exec（默认模型）生成短上下文；失败时回退到 INJECTION.md |
-| **PreToolUse** | `PreToolUse` | Bash 工具调用前 | 硬规则（denylist + 受保护文件）优先；未命中则调用 codex exec 软判断 |
+| **PreToolUse** | `PreToolUse` | Bash/apply_patch/Edit/Write 工具调用前 | 硬规则（denylist + 受保护文件 + 权限策略）优先；未命中则调用 codex exec 软判断 |
 | **StopJudge** | `Stop` | Codex Turn 结束时 | 调用 codex exec 做判断，写入 JUDGE.md / latest_context.md / judge_latest.json |
 
 ## 目录结构
 
 ```
 .project_wiki/
-    HOME.md                 — 项目主页
-    RULES.md                — 规则和 Hook 契约
-    CURRENT_TASK.md         — 当前任务
-    DECISIONS.md            — 决策记录
-    REJECTED.md             — 被拒绝的方案
-    PROGRESS.md             — 进度跟踪
-    ISSUES.md               — 问题追踪
-    HOOKS.md                — Hook 文档
+    HOME.md                  — 项目主页
+    RULES.md                 — 规则和 Hook 契约
+    CURRENT_TASK.md          — 当前任务
+    DECISIONS.md             — 决策记录
+    REJECTED.md              — 被拒绝的方案
+    PROGRESS.md              — 进度跟踪
+    ISSUES.md                — 问题追踪
+    HOOKS.md                 — Hook 文档
     PROJECT_SPEC_TEMPLATE.md — PROJECT_SPEC 模板
-    PROJECT_SPEC.md         — 项目需求规格（由 AI 生成）
-    JUDGE.md                — StopJudge 完整审计记录（含完整 assistant message）
-    latest_context.md       — StopJudge 生成的短状态摘要
-    judge_latest.json      — JSON 格式最新判断
-    loop_state.json        — 自动继续循环计数
-    INJECTION.md            — 优先注入给 Codex 的短上下文文件
-    guard_log.jsonl        — PreToolUse deny 时的追加日志
+    PROJECT_SPEC.md          — 项目需求规格（由 AI 生成）
+    JUDGE.md                 — StopJudge 完整审计记录（含完整 assistant message）
+    latest_context.md        — StopJudge 生成的短状态摘要
+    judge_latest.json       — JSON 格式最新判断
+    loop_state.json         — 自动继续循环计数
+    INJECTION.md             — 优先注入给 Codex 的短上下文文件
+    guard_log.jsonl         — PreToolUse deny 时的追加日志
+    PERMISSIONS.md          — 权限分层策略说明
 
 hooks/
-        __init__.py
-    codex_client.py         — codex exec 调用封装（默认模型）
-    user_prompt_submit.py   — UserPromptSubmit 事件钩子
-    pre_tool_guard.py       — PreToolUse 事件钩子（仅匹配 Bash）
-    stop_judge.py           — Stop 事件钩子
+         __init__.py
+    codex_client.py          — codex exec 调用封装（默认模型）
+    user_prompt_submit.py    — UserPromptSubmit 事件钩子
+    pre_tool_guard.py        — PreToolUse 事件钩子（Bash + apply_patch + Edit + Write）
+    stop_judge.py            — Stop 事件钩子
+    permission_policy.py     — 权限策略模块
 
 tests/
-    smoke_test.py           — 冒烟测试
+    smoke_test.py            — 冒烟测试
 
 .codex/
-    hooks.json              — Codex Hook 配置
+    hooks.json               — Codex Hook 配置
 
 README.md
 ```
@@ -67,6 +69,37 @@ README.md
 - PreToolUse：硬规则优先，软判断由默认 Codex 完成。
 - Stop：默认 Codex 判断 pass / continue / revise / done / human_review。
 - 自动 continue 最多 3 次，超过强制 human_review。
+
+## v0.3 变化 — 权限分层
+
+v0.3 引入权限分层策略，防止 Codex Worker 修改监督它自己的文件。
+
+### 权限模型
+
+1. **Codex Worker 只能改业务代码**。
+2. **Codex Worker 不能改任务书、规则、Hook、监督日志和状态文件**：
+   - `PROJECT_SPEC.md`、`RULES.md`、`DECISIONS.md`、`REJECTED.md`、`PERMISSIONS.md`
+   - `JUDGE.md`、`latest_context.md`、`judge_latest.json`、`loop_state.json`、`guard_log.jsonl`
+   - `.codex/hooks.json`、`hooks/*.py`（除非 project mode 是 `wikiguard_self_development`）
+3. **PreToolUse Hook** 只能写 `guard_log.jsonl`。
+4. **Stop Hook** 只能写 `JUDGE.md`、`latest_context.md`、`judge_latest.json`、`loop_state.json`、`PROGRESS.md`。
+5. **UserPromptSubmit Hook** 默认只读。
+6. **普通项目模式**（`supervised_project_development`）下，Codex 不能改 `.codex/hooks.json` 和 `hooks/*.py`。
+7. **开发 WikiGuard 自身**时，`PROJECT_SPEC.md` 需声明 `wikiguard_self_development`。
+8. **LLM 软判断不能覆盖硬权限 deny**。
+
+### 权限优先级
+
+1. 绝对危险命令 → deny
+2. 受保护文件和目录 → deny
+3. 监督系统文件 → deny
+4. 超出 PROJECT_SPEC Allowed Scope → deny 或 human_review
+5. 以上通过 → 才允许 LLM 软判断
+
+### 项目模式
+
+- `wikiguard_self_development` — 开发 Codex WikiGuard 自身，允许修改 hooks/*.py、.codex/hooks.json
+- `supervised_project_development` — 被 WikiGuard 监督的普通项目，禁止修改上述监督文件
 
 ## 真实工作流
 
@@ -93,10 +126,10 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/hooks"
 > 如果 Hook 不触发，可尝试去掉 `group`，直接将 `matcher` + `hooks` 放在事件名下：
 > ```json
 > "UserPromptSubmit": [
->      {
->        "matcher": {},
->        "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
->      }
+>       {
+>         "matcher": {},
+>         "hooks": [{ "type": "command", "command": "python -m hooks.user_prompt_submit" }]
+>       }
 > ]
 > ```
 
@@ -117,8 +150,14 @@ echo '{"tool_input": {"command": "rm -rf /tmp/x"}}' | python -m hooks.pre_tool_g
 # PreToolUse — 拦截：受保护文件
 echo '{"tool_input": {"command": "echo x > .env"}}' | python -m hooks.pre_tool_guard
 
+# PreToolUse — 拦截：监督文件
+echo '{"tool_input": {"command": "echo x > .project_wiki/JUDGE.md"}}' | python -m hooks.pre_tool_guard
+
 # PreToolUse — 放行：安全命令
 echo '{"tool_input": {"command": "ls -la"}}' | python -m hooks.pre_tool_guard
+
+# PreToolUse — apply_patch 拦截监督文件
+echo '{"tool": "apply_patch", "tool_input": {"target_file": ".project_wiki/PROJECT_SPEC.md", "original_text": "a", "new_text": "b"}}' | python -m hooks.pre_tool_guard
 
 # StopJudge
 echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_judge
@@ -137,6 +176,11 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 **受保护目录**：
 - `deploy/` / `deployment/` / `migrations/` / `migration/` / `schema/` / `.ssh/` / `.github/workflows/`
 
+**监督系统文件**（Codex Worker 不能修改）：
+- `PROJECT_SPEC.md` / `RULES.md` / `DECISIONS.md` / `REJECTED.md` / `PERMISSIONS.md`
+- `JUDGE.md` / `latest_context.md` / `judge_latest.json` / `loop_state.json` / `guard_log.jsonl`
+- `.codex/hooks.json` / `hooks/*.py`
+
 **写操作关键词**：`rm` / `mv` / `cp` / `>` / `>>` / `tee` / `sed -i` / `perl -pi` / `python -c` / `python3 -c`
 
 ## Wire Format 约定
@@ -153,6 +197,8 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 4. **不实现**：Subagent、PostToolUse、PreCompact、run_task.py。
 5. **不写死模型名**：Hook 通过 `codex exec` 调用默认模型，不传 `-m`。
 6. **递归保护**：子进程设置 `CODEX_WIKIGUARD_CHILD=1`，不触发 WikiGuard 判断。
+7. **权限分层**：Codex Worker 不能修改监督系统文件，LLM 软判断不能覆盖硬权限 deny。
+8. **自动 continue 权限门控**：Stop 判断的 next_action 如涉及监督文件修改，强制 human_review。
 
 ## 后续方向
 
