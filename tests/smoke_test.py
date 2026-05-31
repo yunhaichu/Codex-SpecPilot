@@ -311,24 +311,34 @@ def test_judge_latest_json():
 def test_hooks_json_pretooluse_coverage():
     print("\n[hooks.json -- PreToolUse coverage]")
     hooks_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               ".codex", "hooks.json")
+                                 ".codex", "hooks.json")
     if os.path.exists(hooks_path):
         with open(hooks_path) as f:
             data = json.load(f)
-        pretooluse = data.get("hooks", {}).get("PreToolUse", {})
-        # Check matcher covers Bash, apply_patch, Edit, Write
-        groups = pretooluse.get("group", [])
-        if groups:
-            tool_matcher = groups[0].get("matcher", {}).get("tool", "")
-            test("PreToolUse matcher includes Bash", "Bash" in tool_matcher)
-            test("PreToolUse matcher includes apply_patch", "apply_patch" in tool_matcher)
-            test("PreToolUse matcher includes Edit", "Edit" in tool_matcher)
-            test("PreToolUse matcher includes Write", "Write" in tool_matcher)
+        pretooluse = data.get("hooks", {}).get("PreToolUse", [])
+         # New format: PreToolUse is a direct array of matcher groups
+        if isinstance(pretooluse, list):
+            matchers = [g.get("matcher", "") for g in pretooluse]
+            combined = " ".join(str(m) for m in matchers)
+            test("PreToolUse matcher includes Bash", "Bash" in combined)
+            test("PreToolUse matcher includes apply_patch", "apply_patch" in combined)
+            test("PreToolUse matcher includes Edit", "Edit" in combined)
+            test("PreToolUse matcher includes Write", "Write" in combined)
+         # Old format: PreToolUse is a dict with "group" key
+        elif isinstance(pretooluse, dict):
+            groups = pretooluse.get("group", [])
+            if groups:
+                tool_matcher = groups[0].get("matcher", {}).get("tool", "")
+                test("PreToolUse matcher includes Bash", "Bash" in tool_matcher)
+                test("PreToolUse matcher includes apply_patch", "apply_patch" in tool_matcher)
+                test("PreToolUse matcher includes Edit", "Edit" in tool_matcher)
+                test("PreToolUse matcher includes Write", "Write" in tool_matcher)
+            else:
+                test("PreToolUse has groups", False, "no groups found")
         else:
-            test("PreToolUse has groups", False, "no groups found")
+            test("PreToolUse is array or dict", False, f"unexpected type: {type(pretooluse)}")
     else:
         test("hooks.json exists", False, "file missing")
-
 
 def test_soft_judge_allows_safe_cmd():
     print("\n[PreToolUse -- soft judge allows safe cmd in scope]")

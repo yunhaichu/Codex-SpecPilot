@@ -15,3 +15,10 @@
 - Added smoke tests for supervised project fixture
 - smoke_test.py: **120/120 pass** (up from 110)
 - This prepares the first real start/end workflow trial
+
+## hooks config sequence format fix (2026-05-31)
+- Fixed Codex hooks config parse error by switching to sequence format (no "group" wrapper).
+- Commented out non-WikiGuard hooks in ~/.codex/hooks.json.
+- PreToolUse now uses per-tool matcher groups (Bash, apply_patch, Edit, Write).
+- Updated smoke_test.py test_hooks_json_pretooluse_coverage() to handle both old and new formats.
+- smoke_test.py: **120/120 pass**

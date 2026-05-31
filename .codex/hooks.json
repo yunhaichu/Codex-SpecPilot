@@ -1,51 +1,76 @@
 {
     "hooks": {
-        "UserPromptSubmit": {
-            "group": [
-                {
-                    "matcher": "",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "name": "wiki-guard-user-prompt",
-                            "command": ["python", "-m", "hooks.user_prompt_submit"],
-                            "enabled": true
-                        }
-                    ]
-                }
-            ]
-        },
-        "PreToolUse": {
-            "group": [
-                {
-                    "matcher": {
-                        "tool": "^(Bash|apply_patch|Edit|Write)$"
-                    },
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "name": "wiki-guard-tool-guard",
-                            "command": ["python", "-m", "hooks.pre_tool_guard"],
-                            "enabled": true
-                        }
-                    ]
-                }
-            ]
-        },
-        "Stop": {
-            "group": [
-                {
-                    "matcher": "",
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "name": "wiki-guard-stop-judge",
-                            "command": ["python", "-m", "hooks.stop_judge"],
-                            "enabled": true
-                        }
-                    ]
-                }
-            ]
-        }
+        "UserPromptSubmit": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-user-prompt",
+                        "command": "python -m hooks.user_prompt_submit",
+                        "enabled": true
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-tool-guard-bash",
+                        "command": "python -m hooks.pre_tool_guard",
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "matcher": "apply_patch",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-tool-guard-apply-patch",
+                        "command": "python -m hooks.pre_tool_guard",
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "matcher": "Edit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-tool-guard-edit",
+                        "command": "python -m hooks.pre_tool_guard",
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "matcher": "Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-tool-guard-write",
+                        "command": "python -m hooks.pre_tool_guard",
+                        "enabled": true
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "name": "wiki-guard-stop-judge",
+                        "command": "python -m hooks.stop_judge",
+                        "enabled": true
+                    }
+                ]
+            }
+        ]
     }
 }
