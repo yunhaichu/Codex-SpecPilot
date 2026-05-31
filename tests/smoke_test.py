@@ -344,6 +344,47 @@ def test_soft_judge_denies_on_failure():
          "LLM soft judge" in reason or "soft judge" in reason)
 
 
+def test_profile_inheritance():
+    print("\n[Profile inheritance]")
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
+    from codex_client import build_codex_exec_command, call_codex_default
+
+     # 1. No env vars -> default command
+    old_profile = os.environ.pop("CODEX_PROFILE", None)
+    old_wiki_profile = os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
+    cmd = build_codex_exec_command("prompt")
+    test("no profile env -> default command",
+          cmd == ["codex", "exec", "prompt"])
+
+     # 2. CODEX_PROFILE set
+    os.environ["CODEX_PROFILE"] = "test-profile"
+    cmd = build_codex_exec_command("prompt")
+    test("CODEX_PROFILE set -> uses it",
+          cmd == ["codex", "exec", "--profile", "test-profile", "prompt"])
+    os.environ.pop("CODEX_PROFILE")
+
+     # 3. CODEX_WIKIGUARD_PROFILE set
+    os.environ["CODEX_WIKIGUARD_PROFILE"] = "wiki-profile"
+    cmd = build_codex_exec_command("prompt")
+    test("CODEX_WIKIGUARD_PROFILE set -> uses it",
+          cmd == ["codex", "exec", "--profile", "wiki-profile", "prompt"])
+
+     # 4. Both set -> wiki takes priority
+    os.environ["CODEX_PROFILE"] = "base-profile"
+    cmd = build_codex_exec_command("prompt")
+    test("both set -> CODEX_WIKIGUARD_PROFILE takes priority",
+          cmd == ["codex", "exec", "--profile", "wiki-profile", "prompt"])
+    os.environ.pop("CODEX_PROFILE")
+    os.environ.pop("CODEX_WIKIGUARD_PROFILE")
+
+     # 5. call_codex_default returns profile and command_mode
+    os.environ["CODEX_WIKIGUARD_PROFILE"] = "test-profile"
+    result = call_codex_default("test prompt", timeout=5)
+    test("call_codex_default includes profile field", "profile" in result)
+    test("call_codex_default includes command_mode field", "command_mode" in result)
+    test("command_mode is profile when env set", result.get("command_mode") == "profile")
+    os.environ.pop("CODEX_WIKIGUARD_PROFILE")
 def main():
     print("=== Codex-WikiGuard Smoke Tests ===")
     # Recursive guards
@@ -367,6 +408,8 @@ def main():
     test_judge_latest_json()
     test_hooks_json_pretooluse_coverage()
     test_soft_judge_denies_on_failure()
+    test_profile_inheritance()
+
 
     # Cleanup
     guard_log = os.path.join(WIKI_DIR, "guard_log.jsonl")
@@ -429,3 +472,5 @@ def test_protected_target_hard_rule_reachability(child=False):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+

@@ -205,3 +205,30 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 - 扩展 denylist / 受保护文件列表
 - 增加 Hook 日志和审计功能
 - 优化 codex exec prompt 以提高判断质量
+
+## Codex profile inheritance
+
+1. WikiGuard 不写死模型。
+2. WikiGuard 不写死 profile。
+3. 默认调用：
+
+```bash
+codex exec <prompt>
+```
+
+4. 如果当前 Codex 需要 profile 才能使用本地模型，应由启动环境提供：
+
+```bash
+export CODEX_PROFILE=ollama-launch-codex-app
+```
+
+或：
+
+```bash
+export CODEX_WIKIGUARD_PROFILE=ollama-launch-codex-app
+```
+
+5. `CODEX_WIKIGUARD_PROFILE` 优先级高于 `CODEX_PROFILE`。
+6. 这只是继承启动环境，不是 WikiGuard 独立配置模型。
+7. 如果使用 ChatGPT 账号模式运行 Codex，而该模式不支持自定义本地模型，则 Hook LLM supervision 会 fail closed。
+8. 这种情况下需要修复 Codex 运行环境，而不是修改 WikiGuard 代码。

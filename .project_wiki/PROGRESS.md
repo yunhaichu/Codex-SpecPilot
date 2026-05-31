@@ -57,3 +57,9 @@
   - Hook 的 fail-closed 策略生效：codex exec 失败 → soft judge 返回 deny
 - 解决方案：需要使用 API Key 模式的 Codex 配置，或等 Codex CLI 支持非 OpenAI 模型
 - smoke_test.py: **88/88 pass**（修复后）
+
+## codex exec profile inheritance fix
+- Removed hardcoded profile from codex_client.py.
+- Added CODEX_WIKIGUARD_PROFILE / CODEX_PROFILE inheritance.
+- Added codex exec diagnostic script.
+- Confirmed WikiGuard does not own model/profile selection.
