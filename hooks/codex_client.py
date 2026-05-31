@@ -6,10 +6,11 @@ Child Codex inherits parent default model and configuration.
 import json
 import os
 import subprocess
+from datetime import datetime, timezone
 
 WIKI_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-     ".project_wiki"
+        ".project_wiki"
 )
 
 LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
@@ -85,17 +86,19 @@ def _read_loop_state():
         return 0
 
 
-def _write_loop_state(count, auto_continue):
+def _write_loop_state(count, auto_continue, verdict="human_review"):
+    ts = datetime.now(timezone.utc).isoformat()
     data = {
         "loop_count": count,
         "auto_continue": auto_continue,
-        "last_updated": None,
+        "last_verdict": verdict,
+        "updated_at": ts,
     }
     with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def check_auto_continue(verb):
+def check_auto_continue():
     """Check loop state and decide whether to allow auto-continue."""
     loop_count = _read_loop_state()
     if loop_count >= MAX_LOOP_COUNT:

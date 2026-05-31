@@ -2,16 +2,16 @@
 
 ## Latest Judgment
 
-**Timestamp**: 2026-05-31T02:24:11.265292+00:00
+**Timestamp**: 2026-05-31T03:06:15.422057+00:00
 
 **Verdict**: human_review
 
-**Reason**: Default conservative judgment in v2.
+**Reason**: LLM call failed or returned unparseable: codex exec returned 1: Error: legacy `profile = "ollama-launch-codex-app"` config is no longer supported; use `--profile ollama-launch-codex-app` with `ollama-launch-codex-app.config.toml` instead
 
 ## Assistant Message (last turn)
 
 ```
-permission test
+permission and stop test
 ```
 
 ## Next Action
