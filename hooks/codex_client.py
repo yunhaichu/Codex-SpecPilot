@@ -29,9 +29,15 @@ def build_codex_exec_command(prompt):
     Never hardcodes a profile name in this file.
     """
     profile = os.environ.get("CODEX_WIKIGUARD_PROFILE") or os.environ.get("CODEX_PROFILE")
+    base = [
+        "codex", "exec", "--json", "--ephemeral",
+        "--skip-git-repo-check", "--disable", "hooks",
+        "--disable", "plugins", "--disable", "apps", "--disable", "memories",
+        "-c", 'model_reasoning_effort="none"',
+    ]
     if profile:
-        return ["codex", "exec", "--skip-git-repo-check", "--profile", profile, prompt]
-    return ["codex", "exec", "--skip-git-repo-check", prompt]
+        return base + ["--profile", profile, prompt]
+    return base + [prompt]
 
 
 def call_codex_default(prompt, timeout=120):
@@ -55,36 +61,57 @@ def call_codex_default(prompt, timeout=120):
     command_mode = "profile" if profile else "default"
 
     try:
-        result = subprocess.run(
+        env = {
+            **os.environ,
+            "CODEX_WIKIGUARD_CHILD": "1",
+            "PYTHONUNBUFFERED": "1",
+        }
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             cwd=WIKI_DIR,
-            env={
-                **os.environ,
-                "CODEX_WIKIGUARD_CHILD": "1",
-                "PYTHONUNBUFFERED": "1",
-            },
+            env=env,
         )
-        if result.returncode == 0:
+        stdout_lines = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            stdout_lines.append(line)
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            item = event.get("item", {}) if isinstance(event, dict) else {}
+            if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+                content = item.get("text", "").strip()
+                proc.kill()
+                proc.wait(timeout=1)
+                return {
+                    "ok": True,
+                    "content": content,
+                    "error": None,
+                    "profile": profile,
+                    "command_mode": command_mode,
+                }
+
+        stderr = proc.stderr.read() if proc.stderr is not None else ""
+        returncode = proc.wait(timeout=timeout)
+        if returncode == 0:
             return {
                 "ok": True,
-                "content": result.stdout.strip(),
+                "content": "".join(stdout_lines).strip(),
                 "error": None,
                 "profile": profile,
                 "command_mode": command_mode,
             }
-        else:
-            return {
-                "ok": False,
-                "content": "",
-                "error": "codex exec returned %d: %s" % (
-                    result.returncode, result.stderr.strip()
-                ),
-                "profile": profile,
-                "command_mode": command_mode,
-            }
+        return {
+            "ok": False,
+            "content": "",
+            "error": "codex exec returned %d: %s" % (returncode, stderr.strip()),
+            "profile": profile,
+            "command_mode": command_mode,
+        }
     except subprocess.TimeoutExpired:
         return {
             "ok": False,

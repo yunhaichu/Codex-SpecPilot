@@ -177,13 +177,13 @@ def test_codex_command_profile_inheritance():
     old_wiki_profile = os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
     try:
         test("default command has no profile",
-             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--skip-git-repo-check", "prompt"])
+             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "prompt"])
         os.environ["CODEX_PROFILE"] = "base"
         test("CODEX_PROFILE is inherited",
-             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--skip-git-repo-check", "--profile", "base", "prompt"])
+             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "--profile", "base", "prompt"])
         os.environ["CODEX_WIKIGUARD_PROFILE"] = "wiki"
         test("CODEX_WIKIGUARD_PROFILE wins",
-             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--skip-git-repo-check", "--profile", "wiki", "prompt"])
+             codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "--profile", "wiki", "prompt"])
     finally:
         if old_profile is not None:
             os.environ["CODEX_PROFILE"] = old_profile

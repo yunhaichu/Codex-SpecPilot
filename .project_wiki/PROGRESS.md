@@ -139,3 +139,25 @@ Conclusion:
 - Path finding: hooks must resolve the target project's `.project_wiki`, not the WikiGuard repo's own `.project_wiki`; this run required `CODEX_WIKIGUARD_PROJECT_DIR` / cwd-aware path resolution.
 - Limit: no `JUDGE.md`, `judge_latest.json`, `latest_context.md`, or `loop_state.json` was produced in the example project, so Stop Hook `decision:block` auto-continue is still not real-world verified.
 - Cleanup: example fixture was restored to its unfinished baseline so it remains reusable for future trials.
+
+## TASK-005 clean unattended e2e trial (2026-05-31)
+- Result: blocked.
+- Trial directory: `/tmp/wikiguard-task005-clean-e2e`.
+- Minimal fixes applied in repo:
+  - `codex_client.py` now runs child `codex exec` with hooks disabled, JSON streaming, ephemeral mode, nonessential child features disabled, and no hardcoded model/profile/endpoint.
+  - `stop_judge.py` uses a compact AI judging prompt to keep Stop lightweight.
+- Evidence from real CLI trial:
+  - UserPromptSubmit loaded and completed.
+  - PreToolUse loaded and enforced boundaries.
+  - Codex completed TASK-001 only in `src/calculator.py`.
+  - Stop Hook still failed in the real CLI run before writing `JUDGE.md`, `judge_latest.json`, `latest_context.md`, or `loop_state.json`.
+- Direct hook reproduction:
+  - Running `hooks.stop_judge` directly on the same incomplete result returned `decision:block` with next action for TASK-002.
+  - Direct Stop AI judging sometimes takes about 9-12 seconds; the current trusted user-level Stop hook appears constrained by a shorter outer timeout.
+- Environment/loading findings:
+  - The user-level hook command `python -m hooks...` does not find WikiGuard hooks in an arbitrary target project unless the environment exposes the WikiGuard repo on `PYTHONPATH` or an equivalent launcher/symlink is present.
+  - Changing `~/.codex/hooks.json` timeout invalidated hook loading under the current trust state, so the long-timeout config could not be verified non-interactively.
+- Secondary finding not fixed in this pass:
+  - PreToolUse failed to parse Codex `apply_patch` target paths in the real CLI payload and blocked apply_patch; Codex worked around it with a narrow Perl edit. This was not fixed because TASK-005 only allowed minimal loading/trust/timeout/environment fixes.
+- Conclusion:
+  - Code-ready improved, but TASK-005 is not real-world verified. The remaining blocker is user-level hook loading/trust/timeout configuration for Stop in real Codex CLI execution.

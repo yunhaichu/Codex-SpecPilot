@@ -202,35 +202,24 @@ def stop_judge(turn_payload):
     project_spec = _read_file(_wiki_path("PROJECT_SPEC.md"))
     latest_ctx = _read_file(_wiki_path("latest_context.md"))
 
-    # LLM judgment with real context
+    # LLM judgment with compact real context. Keep this prompt light because
+    # Stop hooks must finish inside Codex hook timeouts.
     llm_prompt = (
-        "You are Codex-WikiGuard Stop Judge. Analyze the assistant's last message\n"
-        "and determine if the task is complete, needs revision, or should continue.\n\n"
-        "PROJECT_SPEC.md:\n```\n%s\n```\n\n"
-        "Latest judge context:\n```\n%s\n```\n\n"
-        "Assistant's last message:\n```\n%s\n```\n\n"
-        "Output ONLY a JSON object with these fields:\n"
-        '{\n'
-        '    "verdict": "pass | continue | revise | done | human_review",\n'
-        '    "reason": "brief reason (one sentence)",\n'
-        '    "next_action": "what the main Codex should do next, or empty if done/pass",\n'
-        '    "auto_continue": true\n'
-        "}\n"
-           "- Judge system boundary:\n"
-           "- Codex Worker must not modify the judge system that controls it,\n"
-           "  including PROJECT_SPEC, RULES, DECISIONS, REJECTED, PERMISSIONS,\n"
-           "  JUDGE, judge_latest, latest_context, loop_state, guard_log,\n"
-           "  .codex/hooks.json, or hooks/*.py unless the current task is explicitly\n"
-           "  WikiGuard self-development.\n"
-           "- Use your judgment against PROJECT_SPEC to decide if the next step should\n"
-           "  continue, revise, finish, or require human review.\n"
-           "- Max 3 auto-continue loops. If loop limit reached, set human_review.\n"
-           "- If the assistant's message indicates task is complete, set verdict to done.\n"
-           "- If the assistant's message is just a reply with no actionable task, set verdict to pass.\n"
-             "" % (
-            project_spec[:3000] if project_spec else "(no PROJECT_SPEC.md)",
-            latest_ctx[:1000] if latest_ctx else "(no latest_context.md)",
-            assistant_msg[:3000],
+        "You are Codex-WikiGuard Stop Judge. Return ONLY JSON.\n"
+        "Schema: {\"verdict\":\"pass|continue|revise|done|human_review\","
+        "\"reason\":\"brief\",\"next_action\":\"action or empty\","
+        "\"auto_continue\":true}\n"
+        "Rules: done only when all acceptance criteria are met; pass for a no-op reply; "
+        "continue/revise when work should proceed; human_review if unsafe or unclear. "
+        "Worker must not edit judge-system files: PROJECT_SPEC, RULES, PERMISSIONS, "
+        "JUDGE, latest_context, judge_latest, loop_state, guard_log, .codex/hooks.json, hooks/*.py.\n"
+        "PROJECT_SPEC:\n```\n%s\n```\n"
+        "LATEST_CONTEXT:\n```\n%s\n```\n"
+        "LAST_ASSISTANT_MESSAGE:\n```\n%s\n```\n"
+        % (
+            project_spec[:1000] if project_spec else "(no PROJECT_SPEC.md)",
+            latest_ctx[:300] if latest_ctx else "(no latest_context.md)",
+            assistant_msg[:700],
         )
     )
     llm_result = call_codex_default(llm_prompt, timeout=120)
