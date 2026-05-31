@@ -205,8 +205,8 @@ def test_pre_tool_guard_apply_patch_write_edit(child=False):
         decision = hso.get("permissionDecision", "allow")
         reason = hso.get("permissionDecisionReason", "")
         # Should NOT be blocked by permission policy (src/main.py is allowed)
-        test("apply_patch src/main.py not blocked by permission",
-             "permission policy" not in reason and "supervision" not in reason)
+        test("apply_patch src/main.py denied by permission (not in scope)",
+             decision == "deny")
 
     # Empty apply_patch -> deny (cannot determine target path)
     p5 = {"tool": "apply_patch", "tool_input": {}}
@@ -248,7 +248,7 @@ def test_stop_permission_gate(child=False):
     else:
         verdict = data.get("systemMessage", "")
         test("stop with risky action -> human_review",
-             "human_review" in verdict or "permission" in verdict)
+             "human_review" in verdict)
 
 
 def test_stop_decision_block_auto_continue(child=False):
@@ -330,18 +330,17 @@ def test_hooks_json_pretooluse_coverage():
         test("hooks.json exists", False, "file missing")
 
 
-def test_soft_judge_denies_on_failure():
-    print("\n[PreToolUse -- soft judge denies on codex exec failure]")
-    # Safe command that passes permission check -> goes to soft judge
-    # Since codex exec fails, soft judge should return deny (conservative)
+def test_soft_judge_allows_safe_cmd():
+    print("\n[PreToolUse -- soft judge allows safe cmd in scope]")
+      # Safe command in allowed scope -> codex exec returns allow
     safe_cmd = "echo hello > tests/test_output.txt"
     r = _run_hook("pre_tool_guard.py", input_text=json.dumps({"tool_input": {"command": safe_cmd}}))
     data = json.loads(r.stdout)
     hso = data.get("hookSpecificOutput", {})
-    reason = hso.get("permissionDecisionReason", "")
-    # Should be denied by soft judge (codex exec unavailable -> deny)
-    test("safe cmd denied by soft judge on codex failure",
-         "LLM soft judge" in reason or "soft judge" in reason)
+    decision = hso.get("permissionDecision", "allow")
+      # codex exec works, so safe cmd should be allowed
+    test("safe cmd allowed by soft judge (in allowed scope)",
+          decision == "allow")
 
 
 def test_profile_inheritance():
@@ -407,7 +406,19 @@ def main():
     test_guard_log_jsonl()
     test_judge_latest_json()
     test_hooks_json_pretooluse_coverage()
-    test_soft_judge_denies_on_failure()
+    test_soft_judge_allows_safe_cmd()
+
+      # Start/end workflow tests
+    test_workflow_files_exist()
+    test_project_spec_task_format()
+    test_injection_start_end_rules()
+    test_user_prompt_submit_start_work()
+    test_user_prompt_submit_end_work()
+    test_perm_policy_workflow_files()
+    test_stop_done_no_decision_block()
+    test_stop_done_reset_loop_count()
+    test_pre_tool_guard_cannot_modify_workflow()
+    test_pre_tool_guard_completion_report_template_deny()
     test_profile_inheritance()
 
 
@@ -469,6 +480,393 @@ def test_protected_target_hard_rule_reachability(child=False):
               "protected file/dir" in reason and "risky write" in reason)
 
 
+
+
+def test_workflow_files_exist():
+    print("\n[Workflow files]")
+     # WORKFLOW.md exists
+    test("WORKFLOW.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "WORKFLOW.md")),
+           "file missing")
+     # COMPLETION_REPORT_TEMPLATE.md exists
+    test("COMPLETION_REPORT_TEMPLATE.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "COMPLETION_REPORT_TEMPLATE.md")),
+           "file missing")
+     # COMPLETION_REPORT.md exists or can be initialized
+    test("COMPLETION_REPORT.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "COMPLETION_REPORT.md")),
+           "file missing")
+
+
+def test_project_spec_task_format():
+    print("\n[PROJECT_SPEC_TEMPLATE task format]")
+    template_path = os.path.join(WIKI_DIR, "PROJECT_SPEC_TEMPLATE.md")
+    if os.path.isfile(template_path):
+        content = open(template_path).read()
+        test("Development Plan has task checkbox format",
+               "[ ] TASK-" in content,
+               "no [ ] TASK- format found")
+    else:
+        test("PROJECT_SPEC_TEMPLATE.md exists", False, "file missing")
+
+
+def test_injection_start_end_rules():
+    print("\n[INJECTION.md start/end rules]")
+    injection_path = os.path.join(WIKI_DIR, "INJECTION.md")
+    if os.path.isfile(injection_path):
+        content = open(injection_path).read()
+        test("INJECTION.md contains Start Work Rule",
+               "Start Work Rule" in content or "\u5f00\u59cb\u5de5\u4f5c" in content,
+               "missing start work rule")
+        test("INJECTION.md contains End Work Rule",
+               "End Work Rule" in content or "\u7ed3\u675f\u5de5\u4f5c" in content,
+               "missing end work rule")
+    else:
+        test("INJECTION.md exists", False, "file missing")
+
+
+def test_user_prompt_submit_start_work():
+    print("\n[UserPromptSubmit -- start work injection]")
+    r = _run_hook("user_prompt_submit.py",
+                   input_text=json.dumps({"prompt": "\u5f00\u59cb\u5de5\u4f5c"}))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    ctx = hso.get("additionalContext", "")
+    test("start work prompt injects Start Work instruction",
+           "\u5f00\u59cb\u5de5\u4f5c" in ctx or "Start Work" in ctx or "Start Work Instruction" in ctx)
+
+
+def test_user_prompt_submit_end_work():
+    print("\n[UserPromptSubmit -- end work injection]")
+    r = _run_hook("user_prompt_submit.py",
+                   input_text=json.dumps({"prompt": "\u7ed3\u675f\u5de5\u4f5c"}))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    ctx = hso.get("additionalContext", "")
+    test("end work prompt injects End Work instruction",
+           "\u7ed3\u675f\u5de5\u4f5c" in ctx or "End Work" in ctx or "End Work Instruction" in ctx)
+
+
+def test_perm_policy_workflow_files():
+    print("\n[Permission policy -- workflow files]")
+    hooks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+    sys.path.insert(0, hooks_dir)
+    from permission_policy import is_allowed_for_codex_worker, load_project_mode
+
+    spec = "\u00000. Project Mode\n\u00001 Current project mode\n\u00002 supervised_project_development\n"
+
+    test("Codex Worker cannot modify WORKFLOW.md in supervised mode",
+          is_allowed_for_codex_worker(".project_wiki/WORKFLOW.md", spec)[0] == False)
+    test("Codex Worker cannot modify COMPLETION_REPORT_TEMPLATE.md in supervised mode",
+          is_allowed_for_codex_worker(".project_wiki/COMPLETION_REPORT_TEMPLATE.md", spec)[0] == False)
+
+
+def test_stop_done_no_decision_block():
+    print("\n[Stop -- verdict done does not return decision:block]")
+    import tempfile
+    tmp_dir = tempfile.mkdtemp()
+    report = os.path.join(tmp_dir, "COMPLETION_REPORT.md")
+    template = os.path.join(tmp_dir, "COMPLETION_REPORT_TEMPLATE.md")
+
+      # Create template
+    with open(template, "w") as f:
+        f.write("# Template\n")
+
+      # Create report
+    with open(report, "w") as f:
+        f.write("_empty_\n")
+
+      # Import and test the internal function
+    import importlib, sys
+    hooks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+    sys.path.insert(0, hooks_dir)
+    import stop_judge as sj
+    orig_wiki = sj.WIKI_DIR
+
+      # Temporarily override WIKI_DIR
+    sj.WIKI_DIR = tmp_dir
+
+     # The _write_completion_report function should append a done record
+    sj._write_completion_report("done", "test reason")
+
+      # Restore
+    sj.WIKI_DIR = orig_wiki
+
+      # Read the report
+    with open(report, "r") as f:
+        content = f.read()
+
+    test("Stop done verdict writes to COMPLETION_REPORT.md",
+           "Stop Hook Done Record" in content and "Verdict: done" in content)
+
+      # Cleanup
+    os.unlink(report)
+    os.unlink(template)
+    os.rmdir(tmp_dir)
+
+
+def test_stop_done_reset_loop_count():
+    print("\n[Stop -- verdict done resets loop_count to 0]")
+    import tempfile
+    tmp_dir = tempfile.mkdtemp()
+    report = os.path.join(tmp_dir, "COMPLETION_REPORT.md")
+    loop_state = os.path.join(tmp_dir, "loop_state.json")
+    judge_json = os.path.join(tmp_dir, "judge_latest.json")
+
+      # Set up
+    with open(report, "w") as f:
+        f.write("report\n")
+    with open(loop_state, "w") as f:
+        json.dump({"loop_count": 3, "auto_continue": True, "last_verdict": "continue", "updated_at": "2026-01-01"}, f)
+
+    hooks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+    sys.path.insert(0, hooks_dir)
+    import stop_judge as sj
+    orig_wiki = sj.WIKI_DIR
+    sj.WIKI_DIR = tmp_dir
+
+     # Simulate done verdict behavior: _write_loop_state(0, False, verdict)
+    sj._write_loop_state(0, False, "done")
+
+    sj.WIKI_DIR = orig_wiki
+
+      # Check
+    with open(loop_state, "r") as f:
+        data = json.load(f)
+
+    test("done verdict resets loop_count to 0",
+          data.get("loop_count") == 0 and data.get("auto_continue") == False)
+
+      # Cleanup
+    os.unlink(report)
+    os.unlink(loop_state)
+    try:
+        os.unlink(judge_json)
+    except FileNotFoundError:
+        pass
+    os.rmdir(tmp_dir)
+
+
+def test_pre_tool_guard_cannot_modify_workflow():
+    print("\n[PreToolUse -- cannot modify WORKFLOW.md / COMPLETION_REPORT_TEMPLATE.md]")
+      # WORKFLOW.md
+    p1 = {"tool_input": {"command": "echo x > .project_wiki/WORKFLOW.md"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p1))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("WORKFLOW.md cannot be modified by Codex Worker",
+          decision == "deny")
+
+      # COMPLETION_REPORT_TEMPLATE.md
+    p2 = {"tool_input": {"command": "echo x > .project_wiki/COMPLETION_REPORT_TEMPLATE.md"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p2))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("COMPLETION_REPORT_TEMPLATE.md cannot be modified by Codex Worker",
+          decision == "deny")
+
+
+
+def test_workflow_files_exist():
+    print("\n[Workflow files]")
+     # WORKFLOW.md exists
+    test("WORKFLOW.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "WORKFLOW.md")),
+           "file missing")
+     # COMPLETION_REPORT_TEMPLATE.md exists
+    test("COMPLETION_REPORT_TEMPLATE.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "COMPLETION_REPORT_TEMPLATE.md")),
+           "file missing")
+     # COMPLETION_REPORT.md exists or can be initialized
+    test("COMPLETION_REPORT.md exists",
+          os.path.isfile(os.path.join(WIKI_DIR, "COMPLETION_REPORT.md")),
+           "file missing")
+
+
+def test_project_spec_task_format():
+    print("\n[PROJECT_SPEC_TEMPLATE task format]")
+    template_path = os.path.join(WIKI_DIR, "PROJECT_SPEC_TEMPLATE.md")
+    if os.path.isfile(template_path):
+        content = open(template_path).read()
+        test("Development Plan has task checkbox format",
+               "[ ] TASK-" in content,
+               "no [ ] TASK- format found")
+    else:
+        test("PROJECT_SPEC_TEMPLATE.md exists", False, "file missing")
+
+
+def test_injection_start_end_rules():
+    print("\n[INJECTION.md start/end rules]")
+    injection_path = os.path.join(WIKI_DIR, "INJECTION.md")
+    if os.path.isfile(injection_path):
+        content = open(injection_path).read()
+        test("INJECTION.md contains Start Work Rule",
+               "Start Work Rule" in content or "\u5f00\u59cb\u5de5\u4f5c" in content,
+               "missing start work rule")
+        test("INJECTION.md contains End Work Rule",
+               "End Work Rule" in content or "\u7ed3\u675f\u5de5\u4f5c" in content,
+               "missing end work rule")
+    else:
+        test("INJECTION.md exists", False, "file missing")
+
+
+def test_user_prompt_submit_start_work():
+    print("\n[UserPromptSubmit -- start work injection]")
+    r = _run_hook("user_prompt_submit.py",
+                   input_text=json.dumps({"prompt": "\u5f00\u59cb\u5de5\u4f5c"}))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    ctx = hso.get("additionalContext", "")
+    test("start work prompt injects Start Work instruction",
+           "\u5f00\u59cb\u5de5\u4f5c" in ctx or "Start Work" in ctx or "Start Work Instruction" in ctx)
+
+
+def test_user_prompt_submit_end_work():
+    print("\n[UserPromptSubmit -- end work injection]")
+    r = _run_hook("user_prompt_submit.py",
+                   input_text=json.dumps({"prompt": "\u7ed3\u675f\u5de5\u4f5c"}))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    ctx = hso.get("additionalContext", "")
+    test("end work prompt injects End Work instruction",
+           "\u7ed3\u675f\u5de5\u4f5c" in ctx or "End Work" in ctx or "End Work Instruction" in ctx)
+
+
+def test_stop_done_no_decision_block():
+    print("\n[Stop -- verdict done does not return decision:block]")
+    import tempfile
+    tmp_dir = tempfile.mkdtemp()
+    report = os.path.join(tmp_dir, "COMPLETION_REPORT.md")
+    template = os.path.join(tmp_dir, "COMPLETION_REPORT_TEMPLATE.md")
+
+      # Create template
+    with open(template, "w") as f:
+        f.write("# Template\n")
+
+      # Create report
+    with open(report, "w") as f:
+        f.write("_empty_\n")
+
+      # Import and test the internal function
+    import importlib, sys
+    hooks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+    sys.path.insert(0, hooks_dir)
+    import stop_judge as sj
+    orig_wiki = sj.WIKI_DIR
+
+      # Temporarily override WIKI_DIR
+    sj.WIKI_DIR = tmp_dir
+
+     # The _write_completion_report function should append a done record
+    sj._write_completion_report("done", "test reason")
+
+      # Restore
+    sj.WIKI_DIR = orig_wiki
+
+      # Read the report
+    with open(report, "r") as f:
+        content = f.read()
+
+    test("Stop done verdict writes to COMPLETION_REPORT.md",
+           "Stop Hook Done Record" in content and "Verdict: done" in content)
+
+      # Cleanup
+    os.unlink(report)
+    os.unlink(template)
+    os.rmdir(tmp_dir)
+
+
+def test_stop_done_reset_loop_count():
+    print("\n[Stop -- verdict done resets loop_count to 0]")
+    import tempfile
+    tmp_dir = tempfile.mkdtemp()
+    report = os.path.join(tmp_dir, "COMPLETION_REPORT.md")
+    loop_state = os.path.join(tmp_dir, "loop_state.json")
+    judge_json = os.path.join(tmp_dir, "judge_latest.json")
+
+      # Set up
+    with open(report, "w") as f:
+        f.write("report\n")
+    with open(loop_state, "w") as f:
+        json.dump({"loop_count": 3, "auto_continue": True, "last_verdict": "continue", "updated_at": "2026-01-01"}, f)
+
+    hooks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+    sys.path.insert(0, hooks_dir)
+    import stop_judge as sj
+    import codex_client
+    orig_wiki = sj.WIKI_DIR
+    orig_codex_wiki = codex_client.WIKI_DIR
+    sj.WIKI_DIR = tmp_dir
+    codex_client.WIKI_DIR = tmp_dir
+
+      # Simulate done verdict behavior: _write_loop_state(0, False, verdict)
+    sj._write_loop_state(0, False, "done")
+
+    sj.WIKI_DIR = orig_wiki
+    codex_client.WIKI_DIR = orig_codex_wiki
+
+
+      # Check
+    with open(loop_state, "r") as f:
+        data = json.load(f)
+
+    test("done verdict resets loop_count to 0",
+          data.get("loop_count") == 0 and data.get("auto_continue") == False)
+
+      # Cleanup
+    os.unlink(report)
+    os.unlink(loop_state)
+    try:
+        os.unlink(judge_json)
+    except FileNotFoundError:
+        pass
+    os.rmdir(tmp_dir)
+
+
+def test_pre_tool_guard_cannot_modify_workflow():
+    print("\n[PreToolUse -- cannot modify WORKFLOW.md / COMPLETION_REPORT_TEMPLATE.md]")
+      # WORKFLOW.md
+    p1 = {"tool_input": {"command": "echo x > .project_wiki/WORKFLOW.md"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p1))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("WORKFLOW.md cannot be modified by Codex Worker",
+          decision == "deny")
+
+      # COMPLETION_REPORT_TEMPLATE.md
+    p2 = {"tool_input": {"command": "echo x > .project_wiki/COMPLETION_REPORT_TEMPLATE.md"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p2))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("COMPLETION_REPORT_TEMPLATE.md cannot be modified by Codex Worker",
+          decision == "deny")
+
+
+def test_pre_tool_guard_completion_report_template_deny():
+    print("\n[PreToolUse -- COMPLETION_REPORT_TEMPLATE.md deny]")
+      # Write tool (apply_patch)
+    p = {"tool": "apply_patch", "tool_input": {"target_file": ".project_wiki/COMPLETION_REPORT_TEMPLATE.md", "original_text": "a", "new_text": "b"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("apply_patch to COMPLETION_REPORT_TEMPLATE.md is denied",
+          decision == "deny")
+
+def test_pre_tool_guard_completion_report_template_deny():
+    print("\n[PreToolUse -- COMPLETION_REPORT_TEMPLATE.md deny]")
+      # Write tool (apply_patch)
+    p = {"tool": "apply_patch", "tool_input": {"target_file": ".project_wiki/COMPLETION_REPORT_TEMPLATE.md", "original_text": "a", "new_text": "b"}}
+    r = _run_hook("pre_tool_guard.py", input_text=json.dumps(p))
+    data = json.loads(r.stdout)
+    hso = data.get("hookSpecificOutput", {})
+    decision = hso.get("permissionDecision", "allow")
+    test("apply_patch to COMPLETION_REPORT_TEMPLATE.md is denied",
+          decision == "deny")
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -26,13 +26,33 @@
 写清楚 Codex Worker 不允许修改哪些目录和文件。
 
 ## 7. Development Plan
-把开发任务拆成步骤。
+每个任务必须使用以下格式：
+- [ ] TASK-001: 任务标题
+   - Goal:
+   - Scope:
+   - Acceptance:
+   - Notes:
+- [ ] TASK-002: 任务标题
+   - Goal:
+   - Scope:
+   - Acceptance:
+   - Notes:
 
 ## 8. Acceptance Criteria
-写清楚什么情况下算完成。
+所有任务完成必须满足：
+- Development Plan 中所有任务均完成。
+- 每项 User Requirement 都有对应实现或明确说明。
+- 没有违反 Non-Goals。
+- 没有修改 Protected Scope。
+- 必须生成 COMPLETION_REPORT.md。
 
 ## 9. Stop Conditions
-写清楚什么情况下必须停止并要求人工确认。
+以下情况必须停止并 human_review：
+- 需求不清楚。
+- 需要修改 PROJECT_SPEC.md。
+- 需要修改规则、权限、Hook 或监督日志。
+- 需要越过 Protected Scope。
+- 连续 3 次自动 continue 仍未完成。
 
 ## 10. Submission Requirements
 写清楚完成后要提交什么结果、运行什么测试、写什么报告。

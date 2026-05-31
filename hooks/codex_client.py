@@ -112,7 +112,7 @@ def call_codex_default(prompt, timeout=120):
 
 def _read_loop_state():
     try:
-        with open(LOOP_STATE_PATH, "r", encoding="utf-8") as f:
+        with open(os.path.join(WIKI_DIR, "loop_state.json"), "r", encoding="utf-8") as f:
             data = json.load(f)
             return int(data.get("loop_count", 0))
     except (FileNotFoundError, json.JSONDecodeError, ValueError):
@@ -127,7 +127,7 @@ def _write_loop_state(count, auto_continue, verdict="human_review"):
         "last_verdict": verdict,
         "updated_at": ts,
     }
-    with open(LOOP_STATE_PATH, "w", encoding="utf-8") as f:
+    with open(os.path.join(WIKI_DIR, "loop_state.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 

@@ -206,6 +206,20 @@ echo '{"last_assistant_message": "changed hooks only"}' | python -m hooks.stop_j
 - 增加 Hook 日志和审计功能
 - 优化 codex exec prompt 以提高判断质量
 
+## Start / End Workflow
+
+1. 用户先通过 AI 对话生成 PROJECT_SPEC.md。
+2. 用户在 Codex 中输入**开始工作**。
+3. Codex 根据 PROJECT_SPEC.md 自动推进。
+4. Hook 监督过程：
+    - UserPromptSubmit 注入任务书、最新状态、权限摘要。
+    - PreToolUse 拦截危险动作和越权修改。
+    - Stop 判断本轮是否通过、继续、纠偏、完成或需要人工确认。
+5. Stop 可在安全条件下自动 continue，最多 3 次。
+6. 所有任务完成后生成 COMPLETION_REPORT.md。
+7. 用户输入**结束工作**可以要求 Codex 整理最终结果。
+8. 这不是完整外层 Harness，只是 Hook + Wiki 驱动的最小闭环。
+
 ## Codex profile inheritance
 
 1. WikiGuard 不写死模型。

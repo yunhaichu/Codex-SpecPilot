@@ -1,1 +1,3 @@
-# Guard log
+{"timestamp": "2026-05-31T06:58:21.719211+00:00", "command": "rm -rf /tmp/x", "reason": "Blocked by Codex-WikiGuard: command matches denylist pattern 'rm\\\\s+-rf\\\\b'"}
+{"timestamp": "2026-05-31T06:58:21.746095+00:00", "command": "echo x > .env", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
+{"timestamp": "2026-05-31T06:58:21.770500+00:00", "command": "echo x > .project_wiki/WORKFLOW.md", "reason": "Codex Worker cannot modify supervision file: .project_wiki/WORKFLOW.md"}

@@ -2,6 +2,7 @@
 
 Calls codex exec (default model) for judgment.
 Permission gate on auto-continue: checks next_action for dangerous ops.
+Writes completion report when verdict is done.
 """
 import json
 import os
@@ -21,6 +22,12 @@ JUDGE_MD = os.path.join(WIKI_DIR, "JUDGE.md")
 LATEST_CTX_MD = os.path.join(WIKI_DIR, "latest_context.md")
 JUDGE_JSON = os.path.join(WIKI_DIR, "judge_latest.json")
 LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
+def _completion_report_path():
+    return os.path.join(WIKI_DIR, "COMPLETION_REPORT.md")
+
+
+def _completion_report_template_path():
+    return os.path.join(WIKI_DIR, "COMPLETION_REPORT_TEMPLATE.md")
 
 DEFAULT_VERDICT = "human_review"
 DEFAULT_REASON = "Default conservative judgment in v2."
@@ -98,6 +105,31 @@ def _write_json(verdict, reason, auto_continue, next_action, loop_count=0,
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def _write_completion_report(verdict, reason):
+    """Write a done record into COMPLETION_REPORT.md if verdict is done."""
+    if verdict != "done":
+        return
+    ts = datetime.now(timezone.utc).isoformat()
+    if not _completion_report_path():
+        if _completion_report_template_path():
+            template = _read_file(COMPLETION_REPORT_TEMPLATE)
+            with open(_completion_report_path(), "w", encoding="utf-8") as f:
+                f.write(template)
+        else:
+            with open(_completion_report_path(), "w", encoding="utf-8") as f:
+                f.write("# Completion Report\n\n_No completion report yet._\n")
+    # Append done record
+    record = (
+        "\n## Stop Hook Done Record\n"
+        "- Timestamp: %s\n"
+        "- Verdict: done\n"
+        "- Reason: %s\n"
+        "- Next action: None (task complete)\n"
+    ) % (ts, reason)
+    with open(_completion_report_path(), "a", encoding="utf-8") as f:
+        f.write(record)
+
+
 def _parse_llm_response(content):
     """Parse LLM JSON response."""
     if not content:
@@ -148,65 +180,59 @@ def stop_judge(turn_payload):
 
     # Read existing history from JUDGE.md
     history = []
-    if os.path.isfile(JUDGE_MD):
-        content = _read_file(JUDGE_MD)
-        history_marker = "## History"
-        if history_marker in content:
-            history_text = content.split(history_marker, 1)[1]
-            lines = [
-                l.strip()
-                for l in history_text.split("\n")
-                if l.strip() and not l.strip().startswith("#")
-            ]
-            history = lines[:10]
+    judge_md = _read_file(JUDGE_MD)
+    for line in judge_md.split("\n"):
+        if line.startswith("## History"):
+            continue
+        if line.startswith("- ") and len(history) > 0:
+            history.append(line)
+        elif not line.startswith("## ") and not line.startswith("# ") and history:
+            if not line.strip():
+                pass
+            else:
+                history.append(line)
 
-    verdict = DEFAULT_VERDICT
-    reason = DEFAULT_REASON
-    next_action = ""
-    auto_continue = False
-    llm_ok = False
-    llm_error = None
-
-    # Read project spec and latest context for LLM prompt
-    project_spec_path = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
-    project_spec = ""
-    if os.path.isfile(project_spec_path):
-        project_spec = _read_file(project_spec_path)
-
+    # Read PROJECT_SPEC and latest context for LLM prompt
+    project_spec = _read_file(os.path.join(WIKI_DIR, "PROJECT_SPEC.md"))
     latest_ctx = _read_file(os.path.join(WIKI_DIR, "latest_context.md"))
 
     # LLM judgment with real context
     llm_prompt = (
-        "You are Codex-WikiGuard Stop Judge. Analyze the assistant\'s last message\n"
+        "You are Codex-WikiGuard Stop Judge. Analyze the assistant's last message\n"
         "and determine if the task is complete, needs revision, or should continue.\n\n"
         "PROJECT_SPEC.md:\n```\n%s\n```\n\n"
         "Latest judge context:\n```\n%s\n```\n\n"
-        "Assistant\'s last message:\n```\n%s\n```\n\n"
+        "Assistant's last message:\n```\n%s\n```\n\n"
         "Output ONLY a JSON object with these fields:\n"
-        "{\n"
+        '{\n'
         '    "verdict": "pass | continue | revise | done | human_review",\n'
         '    "reason": "brief reason (one sentence)",\n'
         '    "next_action": "what the main Codex should do next, or empty if done/pass",\n'
         '    "auto_continue": true\n'
         "}\n"
-        "Safety rules:\n"
-        "- If next_action involves modifying PROJECT_SPEC.md, RULES.md, DECISIONS.md,\n"
-        "  REJECTED.md, PERMISSIONS.md, JUDGE.md, judge_latest.json, latest_context.md,\n"
-        "  loop_state.json, guard_log.jsonl, .codex/hooks.json, hooks/*.py, .env, secrets,\n"
-        "  keys, deleting files, reset repository, deploy scripts, database schema,\n"
-        "  or large refactor -> set verdict to human_review, auto_continue to false.\n"
-        "- auto_continue is true ONLY if the action is safe business code development\n"
-        "  within the Allowed Scope of PROJECT_SPEC.md.\n"
-        "- Max 3 auto-continue loops. If loop limit reached, set human_review.\n"
-        "- If the assistant\'s message indicates task is complete, set verdict to done.\n"
-        "- If the assistant\'s message is just a reply with no actionable task, set verdict to pass.\n"
-        % (
+           "- Safety rules (HIGH PRIORITY - override any other interpretation):\n"
+           "- If the assistant's last message indicates it MODIFIED or WILL MODIFY\n"
+           "  PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, PERMISSIONS.md,\n"
+           "  JUDGE.md, judge_latest.json, latest_context.md, loop_state.json,\n"
+           "  guard_log.jsonl, .codex/hooks.json, hooks/*.py, .env, secrets, keys,\n"
+           "  or mentions deleting files, resetting repository, modifying deploy scripts,\n"
+           "  database schema, or large refactoring -> set verdict to human_review,\n"
+           "  auto_continue to false. THIS RULE TAKES PRECEDENCE.\n"
+           "- If next_action involves any of the above -> set verdict to human_review.\n"
+           "- auto_continue is true ONLY if the action is safe business code development\n"
+           "  within the Allowed Scope of PROJECT_SPEC.md.\n"
+           "- Max 3 auto-continue loops. If loop limit reached, set human_review.\n"
+           "- If the assistant's message indicates task is complete, set verdict to done.\n"
+           "- If the assistant's message is just a reply with no actionable task, set verdict to pass.\n"
+             "" % (
             project_spec[:3000] if project_spec else "(no PROJECT_SPEC.md)",
             latest_ctx[:1000] if latest_ctx else "(no latest_context.md)",
             assistant_msg[:3000],
         )
     )
     llm_result = call_codex_default(llm_prompt, timeout=120)
+    llm_ok = False
+    llm_error = None
     parsed = None
     if llm_result.get("ok"):
         llm_ok = True
@@ -234,6 +260,7 @@ def stop_judge(turn_payload):
 
     # Permission gate on auto-continue
     can_continue = False
+    auto_continue = False
     if verdict in ("continue", "revise") and llm_auto_continue:
         if _is_permission_block(verdict, next_action, project_spec):
             can_continue = False
@@ -255,7 +282,7 @@ def stop_judge(turn_payload):
         auto_continue = True
         reason_max = next_action[:1200] if next_action else "safe continue loop"
         _write_json(verdict, reason, auto_continue, next_action,
-                     loop_count=loop_count + 1, llm_ok=llm_ok, llm_error=llm_error)
+                    loop_count=loop_count + 1, llm_ok=llm_ok, llm_error=llm_error)
         _write_md(verdict, reason, assistant_msg, history, next_action)
         _write_context_md(verdict, reason, next_action)
         return {
@@ -271,6 +298,9 @@ def stop_judge(turn_payload):
                 llm_ok=llm_ok, llm_error=llm_error)
     _write_md(verdict, reason, assistant_msg, history, next_action)
     _write_context_md(verdict, reason, next_action)
+
+    # When verdict is done, write completion report
+    _write_completion_report(verdict, reason)
 
     return {
         "systemMessage": "Codex-WikiGuard wrote %s judgment." % verdict,

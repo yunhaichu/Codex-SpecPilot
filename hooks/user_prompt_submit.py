@@ -3,6 +3,8 @@
 优先注入 INJECTION.md;如果不存在,回退到 HOME/RULES/CURRENT_TASK/JUDGE。
 如果 latest_context.md 存在,会追加在 INJECTION.md 之后。
 输出限制最大长度,避免本地模型上下文溢出。
+
+当用户 prompt 包含"开始工作"或"结束工作"时,注入对应的执行指令。
 """
 import json
 import os
@@ -18,7 +20,7 @@ from permission_policy import get_permission_summary
 
 WIKI_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-     ".project_wiki"
+    ".project_wiki"
 )
 
 PRIMARY_FILE = "INJECTION.md"
@@ -38,9 +40,38 @@ def _read_file(rel_path):
 def _truncate(text):
     if len(text) > MAX_CONTEXT_CHARS:
         return text[:MAX_CONTEXT_CHARS] + (
-             "\n\n[TRUNCATED BY Codex-WikiGuard: injection context exceeded limit]"
-         )
+            "\n\n[TRUNCATED BY Codex-WikiGuard: injection context exceeded limit]"
+        )
     return text
+
+
+def _inject_start_work_prompt(prompt_text):
+    """If user says '开始工作', inject start work instruction."""
+    if not prompt_text:
+        return ""
+    if "开始工作" in prompt_text:
+        return (
+            "\n\n### Start Work Instruction ###\n"
+            "User has said '开始工作'. You must:\n"
+            "1. Read .project_wiki/PROJECT_SPEC.md to understand the task.\n"
+            "2. Find the first uncompleted task in Development Plan (marked [ ]).\n"
+            "3. Execute ONLY that task. Do not jump ahead.\n"
+            "4. At end of each turn, report: which TASK, which files modified, "
+            "what validation done, what is next.\n"
+            "5. Do NOT modify PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, "
+            "PERMISSIONS.md, WORKFLOW.md, COMPLETION_REPORT_TEMPLATE.md.\n"
+            "6. Do NOT modify JUDGE.md, latest_context.md, judge_latest.json, "
+            "loop_state.json, guard_log.jsonl.\n"
+        )
+    if "结束工作" in prompt_text:
+        return (
+            "\n\n### End Work Instruction ###\n"
+            "User has said '结束工作'. You must:\n"
+            "1. Summarize what was completed this turn.\n"
+            "2. Do NOT request auto-continue.\n"
+            "3. If all tasks are done, generate or update COMPLETION_REPORT.md.\n"
+        )
+    return ""
 
 
 def user_prompt_submit(turn_payload):
@@ -50,7 +81,12 @@ def user_prompt_submit(turn_payload):
     Prefers INJECTION.md; falls back to legacy files if INJECTION.md is missing.
     Appends latest_context.md after INJECTION.md if present.
     Appends permission summary at the end.
+    Appends start/end work instruction when user prompt matches.
     """
+    prompt_text = ""
+    if isinstance(turn_payload, dict):
+        prompt_text = turn_payload.get("prompt", "") or ""
+
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
         ctx_append = _read_file(LATEST_CTX_FILE)
@@ -63,6 +99,10 @@ def user_prompt_submit(turn_payload):
             parts.append("### %s ###\n%s" % (fname, content))
         context = "\n\n".join(parts)
 
+    # Append work flow instruction (start/end)
+    start_end_prompt = _inject_start_work_prompt(prompt_text)
+    context += start_end_prompt
+
     # Append permission summary
     perm_summary = get_permission_summary()
     context += "\n\n" + perm_summary
@@ -70,11 +110,11 @@ def user_prompt_submit(turn_payload):
     context = _truncate(context)
 
     return {
-         "hookSpecificOutput": {
-             "hookEventName": "UserPromptSubmit",
-             "additionalContext": context,
-         }
-     }
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        }
+    }
 
 
 if __name__ == "__main__":

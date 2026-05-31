@@ -11,6 +11,8 @@ Codex Worker 可以开发业务代码，但不能修改监督它自己的任务�
 - .codex/hooks.json 是监督配置，Codex Worker 不能改。
 - JUDGE.md / judge_latest.json / latest_context.md / loop_state.json 是监督记录，Codex Worker 不能直接改。
 - guard_log.jsonl 是拦截日志，Codex Worker 不能直接改或清空。
+- WORKFLOW.md 是工作流说明，Codex Worker 不能改。
+- COMPLETION_REPORT_TEMPLATE.md 是报告模板，Codex Worker 不能改。
 
 ## 2. Project Mode
 
@@ -46,6 +48,8 @@ PROJECT_SPEC.md 必须声明项目模式：
 - .project_wiki/judge_latest.json
 - .project_wiki/loop_state.json
 - .project_wiki/guard_log.jsonl
+- .project_wiki/WORKFLOW.md
+- .project_wiki/COMPLETION_REPORT_TEMPLATE.md
 
 ## 3. Hook Write Permissions
 
@@ -74,12 +78,15 @@ PROJECT_SPEC.md 必须声明项目模式：
 - .project_wiki/judge_latest.json
 - .project_wiki/loop_state.json
 - .project_wiki/PROGRESS.md
+- .project_wiki/COMPLETION_REPORT.md（仅在 verdict=done 时）
 不可写：
 - .project_wiki/PROJECT_SPEC.md
 - .project_wiki/RULES.md
 - .project_wiki/DECISIONS.md
 - .project_wiki/REJECTED.md
 - .project_wiki/PERMISSIONS.md
+- .project_wiki/WORKFLOW.md
+- .project_wiki/COMPLETION_REPORT_TEMPLATE.md
 - hooks/*.py
 - .codex/hooks.json
 - 业务代码
