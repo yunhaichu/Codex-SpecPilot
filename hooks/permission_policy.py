@@ -7,6 +7,16 @@ import re
 import os
 import json
 
+
+def _normalize_path(path):
+    """Normalize paths from macOS, Linux, or Windows payloads to slash form."""
+    return os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
+
+
+def _basename(path):
+    return _normalize_path(path).rstrip("/").rsplit("/", 1)[-1]
+
+
 # Supervision files that Codex Worker must not modify
 _SUPERVISION_FILES = [
      "JUDGE.md",
@@ -88,8 +98,8 @@ def load_project_mode(project_spec_text):
 
 def is_supervision_file(path):
     """Check if path is a supervision file (task book, rules, hook config/log/state)."""
-    normalized = os.path.normpath(path).replace(os.sep, "/")
-    basename = os.path.basename(normalized)
+    normalized = _normalize_path(path)
+    basename = _basename(path)
     for sf in _SUPERVISION_FILES:
         if basename == sf or normalized.endswith("/" + sf):
             return True
@@ -104,8 +114,8 @@ def is_supervision_file(path):
 
 def is_hook_state_file(path):
     """Check if path is a Stop Hook state file (JUDGE, latest_context, etc.)."""
-    normalized = os.path.normpath(path).replace(os.sep, "/")
-    basename = os.path.basename(normalized)
+    normalized = _normalize_path(path)
+    basename = _basename(path)
     hook_state_names = [
          "JUDGE.md",
          "latest_context.md",
@@ -121,7 +131,7 @@ def is_hook_state_file(path):
 
 def is_always_protected_path(path):
     """Check if path matches always-protected patterns (.env, keys, deploy, etc.)."""
-    normalized = os.path.normpath(path).replace(os.sep, "/")
+    normalized = _normalize_path(path)
     for pat in _ALWAYS_PROTECTED_PATTERNS:
         if re.search(pat, normalized):
             return True
@@ -165,8 +175,8 @@ def is_allowed_for_codex_worker(path, project_spec_text=None):
     if project_spec_text is None:
         project_spec_text = _get_project_spec_path()
 
-    normalized = os.path.normpath(path).replace(os.sep, "/")
-    basename = os.path.basename(normalized)
+    normalized = _normalize_path(path)
+    basename = _basename(path)
 
      # Check supervision files first
     if is_supervision_file(path):
@@ -208,8 +218,8 @@ def is_allowed_for_hook_writer(hook_name, path):
 
     hook_name: UserPromptSubmit, PreToolUse, Stop
     """
-    normalized = os.path.normpath(path).replace(os.sep, "/")
-    basename = os.path.basename(normalized)
+    normalized = _normalize_path(path)
+    basename = _basename(path)
 
     if hook_name == "UserPromptSubmit":
          # Read-only hook

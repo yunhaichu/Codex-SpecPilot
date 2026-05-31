@@ -1,37 +1,60 @@
-"""StopJudge hook -- writes judgment on turn stop.
-
-Calls codex exec (default model) for judgment.
-Permission gate on auto-continue: checks next_action for dangerous ops.
-Writes completion report when verdict is done.
-"""
+"""StopJudge hook -- AI controller for unattended task-book development."""
 import json
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from permission_policy import load_project_mode, _DANGEROUS_AUTO_ACTIONS
-from codex_client import call_codex_default, _read_loop_state, _write_loop_state
+from codex_client import call_codex_default
 
-WIKI_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".project_wiki"
-)
+WIKI_DIR = str(Path(__file__).resolve().parents[1] / ".project_wiki")
+
+# Recursive guard: child codex exec processes must not judge or write state.
+if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+    print(json.dumps({}, indent=2, ensure_ascii=False))
+    sys.exit(0)
 
 JUDGE_MD = os.path.join(WIKI_DIR, "JUDGE.md")
 LATEST_CTX_MD = os.path.join(WIKI_DIR, "latest_context.md")
 JUDGE_JSON = os.path.join(WIKI_DIR, "judge_latest.json")
 LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
+
+
+def _wiki_path(filename):
+    return os.path.join(WIKI_DIR, filename)
+
+
 def _completion_report_path():
-    return os.path.join(WIKI_DIR, "COMPLETION_REPORT.md")
+    return _wiki_path("COMPLETION_REPORT.md")
 
 
 def _completion_report_template_path():
-    return os.path.join(WIKI_DIR, "COMPLETION_REPORT_TEMPLATE.md")
+    return _wiki_path("COMPLETION_REPORT_TEMPLATE.md")
 
 DEFAULT_VERDICT = "human_review"
 DEFAULT_REASON = "Default conservative judgment in v2."
 NEXT_ACTION = "manual review required before continuing"
+
+
+def _read_loop_state():
+    try:
+        with open(_wiki_path("loop_state.json"), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return int(data.get("loop_count", 0))
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
+        return 0
+
+
+def _write_loop_state(count, auto_continue, verdict="human_review"):
+    data = {
+        "loop_count": count,
+        "auto_continue": auto_continue,
+        "last_verdict": verdict,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(_wiki_path("loop_state.json"), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def _read_file(path):
@@ -40,17 +63,6 @@ def _read_file(path):
             return f.read()
     except FileNotFoundError:
         return "[file missing]"
-
-
-def _is_dangerous_action(text):
-    """Check if next_action involves dangerous operations."""
-    if not text:
-        return False
-    text_lower = text.lower()
-    for pat in _DANGEROUS_AUTO_ACTIONS:
-        if pat.lower() in text_lower:
-            return True
-    return False
 
 
 def _write_md(verdict, reason, assistant_msg, history, next_action_text):
@@ -70,17 +82,17 @@ def _write_md(verdict, reason, assistant_msg, history, next_action_text):
     md += "| _%s_ |\n\n" % na_display
     md += "## History\n\n"
     md += history_text + "\n"
-    with open(JUDGE_MD, "w", encoding="utf-8") as f:
+    with open(_wiki_path("JUDGE.md"), "w", encoding="utf-8") as f:
         f.write(md)
 
 
-def _write_context_md(verdict, reason, next_action_text=""):
+def _write_context_md(verdict, reason, next_action_text="", auto_continue=False):
     md = "# Latest Judge Context\n\n"
     md += "VERDICT: %s\n" % verdict
-    md += "AUTO_CONTINUE: disabled\n"
+    md += "AUTO_CONTINUE: %s\n" % ("enabled" if auto_continue else "disabled")
     md += "NEXT_ACTION: %s\n" % (next_action_text if next_action_text else NEXT_ACTION)
     md += "REASON: %s\n" % reason
-    with open(LATEST_CTX_MD, "w", encoding="utf-8") as f:
+    with open(_wiki_path("latest_context.md"), "w", encoding="utf-8") as f:
         f.write(md)
 
 
@@ -101,7 +113,7 @@ def _write_json(verdict, reason, auto_continue, next_action, loop_count=0,
         data["original_verdict"] = original_verdict
     if original_next_action:
         data["original_next_action"] = original_next_action
-    with open(JUDGE_JSON, "w", encoding="utf-8") as f:
+    with open(_wiki_path("judge_latest.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -110,14 +122,15 @@ def _write_completion_report(verdict, reason):
     if verdict != "done":
         return
     ts = datetime.now(timezone.utc).isoformat()
-    if not _completion_report_path():
-        if _completion_report_template_path():
-            template = _read_file(COMPLETION_REPORT_TEMPLATE)
-            with open(_completion_report_path(), "w", encoding="utf-8") as f:
-                f.write(template)
+    report_path = _completion_report_path()
+    if not os.path.exists(report_path):
+        template_path = _completion_report_template_path()
+        if os.path.exists(template_path):
+            initial_content = _read_file(template_path)
         else:
-            with open(_completion_report_path(), "w", encoding="utf-8") as f:
-                f.write("# Completion Report\n\n_No completion report yet._\n")
+            initial_content = "# Completion Report\n\n_No completion report yet._\n"
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(initial_content)
     # Append done record
     record = (
         "\n## Stop Hook Done Record\n"
@@ -126,7 +139,7 @@ def _write_completion_report(verdict, reason):
         "- Reason: %s\n"
         "- Next action: None (task complete)\n"
     ) % (ts, reason)
-    with open(_completion_report_path(), "a", encoding="utf-8") as f:
+    with open(report_path, "a", encoding="utf-8") as f:
         f.write(record)
 
 
@@ -154,19 +167,12 @@ def _parse_llm_response(content):
 
 
 def _is_permission_block(verdict, next_action, project_spec):
-    """Check if auto-continue should be blocked by permission policy."""
-    if not next_action:
-        return True
-    if _is_dangerous_action(next_action):
-        return True
-    mode = load_project_mode(project_spec)
-    if mode == "supervised_project_development":
-        lower_action = next_action.lower()
-        if "hook" in lower_action or ".codex" in lower_action:
-            return True
-        if "修改 hooks" in next_action or "修改 .codex" in next_action:
-            return True
-    return False
+    """Keep the auto-continue gate mechanical.
+
+    Direction and risk judgment belongs to the AI judge. This gate only ensures
+    there is an actionable next step to send back to the main Codex loop.
+    """
+    return not bool(next_action and next_action.strip())
 
 
 def stop_judge(turn_payload):
@@ -180,7 +186,7 @@ def stop_judge(turn_payload):
 
     # Read existing history from JUDGE.md
     history = []
-    judge_md = _read_file(JUDGE_MD)
+    judge_md = _read_file(_wiki_path("JUDGE.md"))
     for line in judge_md.split("\n"):
         if line.startswith("## History"):
             continue
@@ -193,8 +199,8 @@ def stop_judge(turn_payload):
                 history.append(line)
 
     # Read PROJECT_SPEC and latest context for LLM prompt
-    project_spec = _read_file(os.path.join(WIKI_DIR, "PROJECT_SPEC.md"))
-    latest_ctx = _read_file(os.path.join(WIKI_DIR, "latest_context.md"))
+    project_spec = _read_file(_wiki_path("PROJECT_SPEC.md"))
+    latest_ctx = _read_file(_wiki_path("latest_context.md"))
 
     # LLM judgment with real context
     llm_prompt = (
@@ -210,17 +216,14 @@ def stop_judge(turn_payload):
         '    "next_action": "what the main Codex should do next, or empty if done/pass",\n'
         '    "auto_continue": true\n'
         "}\n"
-           "- Safety rules (HIGH PRIORITY - override any other interpretation):\n"
-           "- If the assistant's last message indicates it MODIFIED or WILL MODIFY\n"
-           "  PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, PERMISSIONS.md,\n"
-           "  JUDGE.md, judge_latest.json, latest_context.md, loop_state.json,\n"
-           "  guard_log.jsonl, .codex/hooks.json, hooks/*.py, .env, secrets, keys,\n"
-           "  or mentions deleting files, resetting repository, modifying deploy scripts,\n"
-           "  database schema, or large refactoring -> set verdict to human_review,\n"
-           "  auto_continue to false. THIS RULE TAKES PRECEDENCE.\n"
-           "- If next_action involves any of the above -> set verdict to human_review.\n"
-           "- auto_continue is true ONLY if the action is safe business code development\n"
-           "  within the Allowed Scope of PROJECT_SPEC.md.\n"
+           "- Judge system boundary:\n"
+           "- Codex Worker must not modify the judge system that controls it,\n"
+           "  including PROJECT_SPEC, RULES, DECISIONS, REJECTED, PERMISSIONS,\n"
+           "  JUDGE, judge_latest, latest_context, loop_state, guard_log,\n"
+           "  .codex/hooks.json, or hooks/*.py unless the current task is explicitly\n"
+           "  WikiGuard self-development.\n"
+           "- Use your judgment against PROJECT_SPEC to decide if the next step should\n"
+           "  continue, revise, finish, or require human review.\n"
            "- Max 3 auto-continue loops. If loop limit reached, set human_review.\n"
            "- If the assistant's message indicates task is complete, set verdict to done.\n"
            "- If the assistant's message is just a reply with no actionable task, set verdict to pass.\n"
@@ -284,7 +287,7 @@ def stop_judge(turn_payload):
         _write_json(verdict, reason, auto_continue, next_action,
                     loop_count=loop_count + 1, llm_ok=llm_ok, llm_error=llm_error)
         _write_md(verdict, reason, assistant_msg, history, next_action)
-        _write_context_md(verdict, reason, next_action)
+        _write_context_md(verdict, reason, next_action, auto_continue=True)
         return {
             "decision": "block",
             "reason": reason_max,
@@ -297,7 +300,7 @@ def stop_judge(turn_payload):
                 loop_count=0 if verdict in ("done", "pass", "human_review") else _read_loop_state(),
                 llm_ok=llm_ok, llm_error=llm_error)
     _write_md(verdict, reason, assistant_msg, history, next_action)
-    _write_context_md(verdict, reason, next_action)
+    _write_context_md(verdict, reason, next_action, auto_continue=False)
 
     # When verdict is done, write completion report
     _write_completion_report(verdict, reason)

@@ -4,6 +4,7 @@ Checks environment, codex version, and runs a test execution.
 Does not modify any files.
 """
 import os
+import shutil
 import subprocess
 import json
 
@@ -11,12 +12,8 @@ import json
 def main():
     print("=== Codex Exec Diagnostic ===\n")
 
-    # 1. which codex
-    try:
-        which = subprocess.run(["which", "codex"], capture_output=True, text=True)
-        print("1. which codex:", which.stdout.strip() or "not found")
-    except Exception as e:
-        print("1. which codex: error", e)
+    # 1. locate codex
+    print("1. codex path:", shutil.which("codex") or "not found")
 
     # 2. codex --version
     try:

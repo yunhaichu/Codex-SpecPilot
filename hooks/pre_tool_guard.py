@@ -1,49 +1,18 @@
-"""PreToolUse hook -- blocks dangerous commands and protected file operations.
+"""PreToolUse hook -- light tool gate for the WikiGuard judge system.
 
-Hard rules (denylist + protected files) have highest priority.
-Permission policy checks run before LLM soft judgment.
-LLM cannot override hard permission denies.
-
-Hooks also cover: Bash, apply_patch, Edit, Write tool calls.
+The goal is not to build a large hardcoded security engine. This hook keeps
+Codex Worker away from the judge system and lets AI judge ordinary write intent.
 """
 import json
 import os
-import re
 import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from permission_policy import (load_project_mode, is_supervision_file,
-    is_always_protected_path, is_allowed_for_codex_worker,
     extract_paths_from_command, extract_paths_from_patch,
     command_has_write_intent)
 from codex_client import call_codex_default
-
-# --- Denylist patterns ---
-DENYLIST = [
-    r"rm\s+-rf\b", r"\bsudo\b", r"git\s+reset\s+--hard\b",
-    r"git\s+clean\s+-fd\b", r"chmod\s+-R\b", r"chown\s+-R\b",
-    r"curl\s+.*\|\s*sh\b", r"wget\s+.*\|\s*sh\b",
-]
-DENY_PATTERNS = [re.compile(p) for p in DENYLIST]
-
-# --- Protected file name patterns ---
-PROTECTED_FILES = [
-    r"\.env\b", r"\.env\.", r"\.pem\b", r"\.key\b",
-    r"\bid_rsa\b", r"\bid_ed25519\b", r"secrets\.",
-    r"credentials\.", r"docker-compose\.yml\b",
-]
-PROTECTED_FILE_PATTERNS = [re.compile(p) for p in PROTECTED_FILES]
-
-# --- Protected directory/path fragments ---
-PROTECTED_PATHS = ["deploy/", "deployment/", "migrations/", "migration/",
-                      "schema/", ".ssh/", ".github/workflows/"]
-
-# --- High-risk write/modify keywords ---
-WRITE_OPS = [r"\brm\b", r"\bmv\b", r"\bcp\b", r">>", r">",
-             r"\btee\b", r"\bsed\s+-i\b", r"\bperl\s+-pi\b",
-             r"\bpython\s+-c\b", r"\bpython3\s+-c\b"]
-WRITE_OP_PATTERNS = [re.compile(p) for p in WRITE_OPS]
 
 REASON_TEMPLATE = "Blocked by Codex-WikiGuard: %s"
 
@@ -136,42 +105,35 @@ def _extract_targets(turn_payload):
     return tool_name, command, file_paths
 
 
-def _has_protected_target(command):
-    """Check if command targets a protected file or dir with a risky write op."""
-    if not command:
+def _is_self_dev_allowed_supervision_target(path, project_spec):
+    """Allow explicit WikiGuard self-development files in self-dev mode."""
+    if load_project_mode(project_spec) != "wikiguard_self_development":
         return False
-    has_write = any(p.search(command) for p in WRITE_OP_PATTERNS)
-    if not has_write:
-        return False
-    for pat in PROTECTED_FILE_PATTERNS:
-        if pat.search(command):
-            return True
-    for protected in PROTECTED_PATHS:
-        if protected in command:
-            return True
-    return False
+    normalized = os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
+    basename = normalized.rstrip("/").rsplit("/", 1)[-1]
+    if normalized.startswith("hooks/") and normalized.endswith(".py"):
+        return True
+    if normalized == ".codex/hooks.json":
+        return True
+    return basename in {
+        "PROJECT_SPEC.md",
+        "PROJECT_SPEC_TEMPLATE.md",
+        "INJECTION.md",
+    }
 
 
-def _check_permission(command, file_paths, tool_name, project_spec):
-    """Check permission policy. Returns (blocked, reason) or (False, "")."""
-    has_write = command_has_write_intent(command) if command else False
+def _check_judge_system_boundary(file_paths, project_spec):
+    """Block Codex Worker from editing the judge system itself."""
     if file_paths:
         seen = set()
         for fp in file_paths:
             if fp in seen:
                 continue
             seen.add(fp)
-            if is_always_protected_path(fp):
-                return (True, "always protected file/dir: %s" % fp)
             if is_supervision_file(fp):
-                return (True, "Codex Worker cannot modify supervision file: %s" % fp)
-            mode = load_project_mode(project_spec)
-            allowed, reason = is_allowed_for_codex_worker(fp, project_spec)
-            if not allowed:
-                return (True, "permission policy: %s" % reason)
-            if mode == "supervised_project_development":
-                if fp.startswith("hooks/") or fp.startswith(".codex/"):
-                    return (True, "Codex Worker cannot modify hooks/.codex in supervised mode")
+                if _is_self_dev_allowed_supervision_target(fp, project_spec):
+                    continue
+                return (True, "Codex Worker cannot modify judge system file: %s" % fp)
     return (False, "")
 
 
@@ -261,35 +223,9 @@ def pre_tool_use(turn_payload):
                 "permissionDecisionReason": reason,
             }}
 
-    # 1. Check denylist (command only)
-    if command:
-        for pattern in DENY_PATTERNS:
-            if pattern.search(command):
-                matched = pattern.pattern
-                reason = REASON_TEMPLATE % (
-                    "command matches denylist pattern %r" % matched
-                )
-                _log_deny(command, reason)
-                return {"hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }}
-        # 2. Check protected files/dirs with write ops
-        if _has_protected_target(command):
-            reason = REASON_TEMPLATE % (
-                "command targets protected file/dir with risky write operation"
-            )
-            _log_deny(command, reason)
-            return {"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }}
-
-    # 3. Permission policy check
+    # 1. Judge system boundary check. This is the minimal non-AI boundary.
     project_spec = _read_project_spec()
-    blocked, reason = _check_permission(command, file_paths, tool_name, project_spec)
+    blocked, reason = _check_judge_system_boundary(file_paths, project_spec)
     if blocked:
         _log_deny(command or tool_name, reason)
         return {"hookSpecificOutput": {
@@ -298,8 +234,12 @@ def pre_tool_use(turn_payload):
             "permissionDecisionReason": reason,
         }}
 
-    # 4. LLM soft judgment (only after hard rules + permission pass)
-    #    codex exec failure -> conservative deny
+    # 2. Read-only commands should not pay for an AI judgment.
+    if command and not file_paths and not command_has_write_intent(command):
+        return {}
+
+    # 3. Ordinary write intent is judged by AI against PROJECT_SPEC.
+    #    codex exec failure -> conservative deny.
     soft_decision = _soft_judge(tool_name, command, file_paths, project_spec)
     if soft_decision == "deny":
         _log_deny(command or tool_name, "LLM soft judge: deny")
