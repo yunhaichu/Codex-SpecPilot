@@ -30,8 +30,8 @@ def build_codex_exec_command(prompt):
     """
     profile = os.environ.get("CODEX_WIKIGUARD_PROFILE") or os.environ.get("CODEX_PROFILE")
     if profile:
-        return ["codex", "exec", "--profile", profile, prompt]
-    return ["codex", "exec", prompt]
+        return ["codex", "exec", "--skip-git-repo-check", "--profile", profile, prompt]
+    return ["codex", "exec", "--skip-git-repo-check", prompt]
 
 
 def call_codex_default(prompt, timeout=120):
