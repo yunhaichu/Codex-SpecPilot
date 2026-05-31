@@ -275,17 +275,17 @@ def pre_tool_use(turn_payload):
                     "permissionDecision": "deny",
                     "permissionDecisionReason": reason,
                 }}
-                # 2. Check protected files/dirs with write ops
-                if _has_protected_target(command):
-                    reason = REASON_TEMPLATE % (
-                        "command targets protected file/dir with risky write operation"
-                    )
-                    _log_deny(command, reason)
-                    return {"hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }}
+        # 2. Check protected files/dirs with write ops
+        if _has_protected_target(command):
+            reason = REASON_TEMPLATE % (
+                "command targets protected file/dir with risky write operation"
+            )
+            _log_deny(command, reason)
+            return {"hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }}
 
     # 3. Permission policy check
     project_spec = _read_project_spec()

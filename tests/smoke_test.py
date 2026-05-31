@@ -362,6 +362,7 @@ def main():
     test_stop_permission_gate(child=False)
     test_stop_decision_block_auto_continue(child=False)
     test_loop_state()
+    test_protected_target_hard_rule_reachability(child=False)
     test_guard_log_jsonl()
     test_judge_latest_json()
     test_hooks_json_pretooluse_coverage()
@@ -375,6 +376,55 @@ def main():
     print("\n=== Results ===")
     print("Passed: %d, Failed: %d" % (PASSED, FAILED))
     return 0 if FAILED == 0 else 1
+
+
+def test_protected_target_hard_rule_reachability(child=False):
+    print("\n[PreToolUse -- protected target hard rule reachability]")
+     # deploy/ path with write -> should be denied by hard rule, not permission policy
+    p1 = {"tool_input": {"command": "echo x > deploy/config.txt"}}
+    r = _run_hook("pre_tool_guard.py", child=child, input_text=json.dumps(p1))
+    data = json.loads(r.stdout)
+    if child:
+        test("protected target deploy/ -> child no-op", data == {})
+    else:
+        hso = data.get("hookSpecificOutput", {})
+        reason = hso.get("permissionDecisionReason", "")
+        test("deploy/ write -> denied by hard rule (not perm policy)",
+              "protected file/dir" in reason and "risky write" in reason)
+         # schema/ path with write
+    p2 = {"tool_input": {"command": "echo x > schema/test.sql"}}
+    r = _run_hook("pre_tool_guard.py", child=child, input_text=json.dumps(p2))
+    data = json.loads(r.stdout)
+    if child:
+        test("protected target schema/ -> child no-op", data == {})
+    else:
+        hso = data.get("hookSpecificOutput", {})
+        reason = hso.get("permissionDecisionReason", "")
+        test("schema/ write -> denied by hard rule",
+              "protected file/dir" in reason and "risky write" in reason)
+         # migration/ path
+    p3 = {"tool_input": {"command": "echo x > migrations/001.py"}}
+    r = _run_hook("pre_tool_guard.py", child=child, input_text=json.dumps(p3))
+    data = json.loads(r.stdout)
+    if child:
+        test("protected target migrations/ -> child no-op", data == {})
+    else:
+        hso = data.get("hookSpecificOutput", {})
+        reason = hso.get("permissionDecisionReason", "")
+        test("migrations/ write -> denied by hard rule",
+              "protected file/dir" in reason and "risky write" in reason)
+         # .github/workflows/ path
+    p4 = {"tool_input": {"command": "echo x > .github/workflows/ci.yml"}}
+    r = _run_hook("pre_tool_guard.py", child=child, input_text=json.dumps(p4))
+    data = json.loads(r.stdout)
+    if child:
+        test("protected target .github/workflows/ -> child no-op", data == {})
+    else:
+        hso = data.get("hookSpecificOutput", {})
+        reason = hso.get("permissionDecisionReason", "")
+        test(".github/workflows/ write -> denied by hard rule",
+              "protected file/dir" in reason and "risky write" in reason)
+
 
 
 if __name__ == "__main__":

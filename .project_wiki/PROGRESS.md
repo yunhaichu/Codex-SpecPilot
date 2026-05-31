@@ -37,3 +37,9 @@
 - codex exec 因 ollama profile 配置问题不可用
 - Hook 代码逻辑已正确实现 fail closed 策略
 - 修复 ollama 配置后 LLM 监督功能即可正常运作
+
+## protected target hard-rule reachability fix (2026-05-31)
+- Fixed unreachable `_has_protected_target(command)` branch in PreToolUse
+- `_has_protected_target` moved to be a sibling of the denylist `for` loop (not nested inside return)
+- Verified: deploy/, schema/, migrations/, .github/workflows/ writes denied by hard rule
+- smoke_test.py: 88/88 pass (up from 84)
