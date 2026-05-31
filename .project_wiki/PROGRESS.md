@@ -161,3 +161,39 @@ Conclusion:
   - PreToolUse failed to parse Codex `apply_patch` target paths in the real CLI payload and blocked apply_patch; Codex worked around it with a narrow Perl edit. This was not fixed because TASK-005 only allowed minimal loading/trust/timeout/environment fixes.
 - Conclusion:
   - Code-ready improved, but TASK-005 is not real-world verified. The remaining blocker is user-level hook loading/trust/timeout configuration for Stop in real Codex CLI execution.
+
+## TASK-005 clean unattended e2e retry after Stop timeout/trust fix (2026-05-31)
+- Result: pass.
+- Clean trial directory: `/tmp/wikiguard-task005-clean-e2e-fixed-Cv2GpR`.
+- Runtime failure source diagnosed:
+  - The failed real CLI run completed TASK-001, then showed `hook: Stop Failed`.
+  - The rollout timestamps showed about 10 seconds between the final assistant message and task completion.
+  - No `JUDGE.md`, `judge_latest.json`, `latest_context.md`, or `loop_state.json` was written in that failed run.
+  - This matched the user-level Stop Hook outer timeout of 10 seconds in `~/.codex/hooks.json`.
+- Minimal environment/trust fix applied:
+  - `~/.codex/hooks.json` Stop Hook timeout changed from 10 to 60 seconds.
+  - `~/.codex/config.toml` trusted Stop Hook hashes updated to the timeout=60 identity hash.
+  - New Stop trusted hash: `sha256:ec8680351435f516f72ce03a17700f8face0ec7fdf2e350c9bbb9cc572296261`.
+  - Backups written before modification:
+    - `~/.codex/hooks.json.task005-timeout.bak`
+    - `~/.codex/config.toml.task005-timeout.bak`
+- Clean trial behavior:
+  - UserPromptSubmit loaded.
+  - Stop returned `decision:block` after TASK-001 and drove the TASK-002 loop.
+  - Stop returned `decision:block` after TASK-002 and drove the TASK-003 loop.
+  - Stop returned `decision:block` after TASK-003 and drove final validation/completion report generation.
+  - Final Stop returned `done` and wrote the Stop Hook Done Record.
+- Final outputs:
+  - `src/calculator.py`: add/subtract implemented.
+  - `tests/test_calculator.py`: unittest coverage added.
+  - `README.md`: calculator usage and test command documented.
+  - `.project_wiki/COMPLETION_REPORT.md`: generated.
+- Verification:
+  - `python run_tests.py`: pass, 2 tests.
+  - `judge_latest.json`: `last_verdict=done`, `llm_ok=true`, `auto_continue=false`.
+  - `loop_state.json`: reset to `loop_count=0`.
+- Remaining issue not fixed in this pass:
+  - PreToolUse still fails to parse real Codex `apply_patch` payload targets and blocks apply_patch with `cannot determine target path for apply_patch write tool`.
+  - The clean e2e still passed because Codex used scoped shell edits within Allowed Scope.
+  - This was not fixed because the requested pass only allowed minimal hook loading/trust/timeout/environment changes.
+
