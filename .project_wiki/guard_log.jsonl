@@ -1,4 +1,4 @@
-{"timestamp": "2026-05-31T04:16:48.042193+00:00", "command": "echo x > deploy/config.txt", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
-{"timestamp": "2026-05-31T04:16:50.172377+00:00", "command": "echo x > schema/test.sql", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
-{"timestamp": "2026-05-31T04:16:52.370502+00:00", "command": "echo x > .env", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
-{"timestamp": "2026-05-31T04:16:54.495381+00:00", "command": "ls -la", "reason": "LLM soft judge: deny"}
+{"timestamp": "2026-05-31T05:14:15.817423+00:00", "command": "echo x > .project_wiki/PROJECT_SPEC.md", "reason": "Codex Worker cannot modify supervision file: .project_wiki/PROJECT_SPEC.md"}
+{"timestamp": "2026-05-31T05:14:18.471143+00:00", "command": "echo x > .project_wiki/JUDGE.md", "reason": "Codex Worker cannot modify supervision file: .project_wiki/JUDGE.md"}
+{"timestamp": "2026-05-31T05:14:21.003365+00:00", "command": "echo x > .env", "reason": "Blocked by Codex-WikiGuard: command targets protected file/dir with risky write operation"}
+{"timestamp": "2026-05-31T05:14:29.549317+00:00", "command": "ls -la", "reason": "LLM soft judge: deny"}

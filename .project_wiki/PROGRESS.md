@@ -43,3 +43,17 @@
 - `_has_protected_target` moved to be a sibling of the denylist `for` loop (not nested inside return)
 - Verified: deploy/, schema/, migrations/, .github/workflows/ writes denied by hard rule
 - smoke_test.py: 88/88 pass (up from 84)
+
+## codex exec 本地环境修复（2026-05-31）
+- 修复前：codex exec 报错 `legacy profile = "ollama-launch-codex-app" config is no longer supported`
+- 修复方式：
+  - 将 `[profiles.ollama-launch-codex-app]` 和 `[model_providers.ollama-launch-codex-app]` 移至 `~/.codex/ollama-launch-codex-app.config.toml`
+  - 从 `~/.codex/config.toml` 中移除 legacy profile 和 model provider 段
+  - `codex_client.py` 添加 `--profile ollama-launch-codex-app` 参数
+- 修复 codex_client.py 缩进错误：call_codex_default 的 docstring 缩进不一致导致 SyntaxError
+- 修复后 codex exec 可以启动，但遇到平台限制：
+  - 错误：`The 'qwen3.6:35b-a3b-coding-mxfp8' model is not supported when using Codex with a ChatGPT account.`
+  - 原因：ChatGPT 账号的 CLI 不支持自定义模型，只支持 OpenAI 模型
+  - Hook 的 fail-closed 策略生效：codex exec 失败 → soft judge 返回 deny
+- 解决方案：需要使用 API Key 模式的 Codex 配置，或等 Codex CLI 支持非 OpenAI 模型
+- smoke_test.py: **88/88 pass**（修复后）
