@@ -7,3 +7,11 @@
 - 修正 smoke_test.py 中 codex_client.WIKI_DIR 设置
 - smoke_test.py: **110/110 pass**（原有 95 + 新增 15）
 - 所有 Hook 行为验证通过
+
+## minimal supervised project fixture (2026-05-31)
+- Added examples/minimal_supervised_project
+- Added supervised PROJECT_SPEC.md with calculator task
+- Added minimal source, tests, README, and project wiki files
+- Added smoke tests for supervised project fixture
+- smoke_test.py: **120/120 pass** (up from 110)
+- This prepares the first real start/end workflow trial

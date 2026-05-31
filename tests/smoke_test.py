@@ -344,6 +344,7 @@ def test_soft_judge_allows_safe_cmd():
 
 
 def test_profile_inheritance():
+    test_minimal_supervised_project_fixture()
     print("\n[Profile inheritance]")
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
@@ -384,6 +385,54 @@ def test_profile_inheritance():
     test("call_codex_default includes command_mode field", "command_mode" in result)
     test("command_mode is profile when env set", result.get("command_mode") == "profile")
     os.environ.pop("CODEX_WIKIGUARD_PROFILE")
+
+def test_minimal_supervised_project_fixture():
+    print("\n[Minimal supervised project fixture]")
+    example_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples", "minimal_supervised_project")
+    
+         # 1. PROJECT_SPEC.md exists
+    spec_path = os.path.join(example_dir, ".project_wiki", "PROJECT_SPEC.md")
+    test("PROJECT_SPEC.md exists", os.path.isfile(spec_path), "file missing")
+    
+         # 2. Project mode is supervised_project_development
+    if os.path.isfile(spec_path):
+        content = open(spec_path).read()
+        test("PROJECT_SPEC mode is supervised_project_development",
+                "supervised_project_development" in content)
+        
+             # 3. Allowed Scope contains example business files
+        allowed = False
+        if "Allowed Scope" in content:
+            allowed_section = content.split("Allowed Scope")[1].split("## ")[0]
+            if "src/calculator.py" in allowed_section:
+                allowed = True
+        test("Allowed Scope contains src/calculator.py", allowed)
+        
+             # 4. Protected Scope contains PROJECT_SPEC.md, Hooks, logs
+        protected_section = content.split("Protected Scope")[1].split("## ")[0] if "Protected Scope" in content else ""
+        test("Protected Scope contains PROJECT_SPEC.md",
+                "PROJECT_SPEC.md" in protected_section)
+        test("Protected Scope contains hooks/*.py",
+                "hooks/*.py" in protected_section)
+        test("Protected Scope contains guard_log.jsonl",
+                "guard_log.jsonl" in protected_section)
+    else:
+        test("Spec content checks", False, "PROJECT_SPEC.md missing")
+    
+         # 5. Fixture files exist
+    test("calculator.py exists",
+          os.path.isfile(os.path.join(example_dir, "src", "calculator.py")))
+    test("test_calculator.py exists",
+          os.path.isfile(os.path.join(example_dir, "tests", "test_calculator.py")))
+    test("README.md exists",
+          os.path.isfile(os.path.join(example_dir, "README.md")))
+    
+         # 6. No external dependencies (stub files)
+    calc_content = open(os.path.join(example_dir, "src", "calculator.py")).read()
+    test("calculator.py uses only stdlib",
+            "import " not in calc_content or "os" in calc_content.lower() or "sys" in calc_content.lower())
+
+
 def main():
     print("=== Codex-WikiGuard Smoke Tests ===")
     # Recursive guards
