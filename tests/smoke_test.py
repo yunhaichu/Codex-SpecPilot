@@ -224,6 +224,75 @@ def test_stop_auto_continue_and_done_helpers():
     test("child stop hook is no-op", json.loads(child.stdout) == {})
 
 
+def test_stop_prompt_keeps_development_plan_context():
+    print("\n[Stop long PROJECT_SPEC context]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    captured = {}
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        long_background = "Background detail.\n" * 250
+        project_spec = (
+            "# PROJECT_SPEC\n\n"
+            "0. Project Mode\nsupervised_project_development\n\n"
+            "1. Project Goal\nBuild a local iOS app.\n\n"
+            "2. Background\n%s\n\n"
+            "7. Development Plan\n"
+            "* TASK-001: Create app skeleton\n"
+            "    * Acceptance: simulator launches the home screen.\n"
+            "* TASK-002: Build local dossier models\n"
+            "    * Acceptance: model files exist and compile.\n\n"
+            "8. Acceptance Criteria\n"
+            "* Development Plan 中所有任务均完成。\n"
+            "* App can build and run.\n\n"
+            "9. Stop Conditions\n"
+            "* Needs protected scope change.\n\n"
+            "10. Submission Requirements\n"
+            "* Generate completion report.\n"
+        ) % long_background
+        for name, content in {
+            "PROJECT_SPEC.md": project_spec,
+            "latest_context.md": "# Latest\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":0,"auto_continue":false}',
+        }.items():
+            with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                f.write(content)
+
+        try:
+            def fake_call(prompt, timeout=120):
+                captured["prompt"] = prompt
+                return {
+                    "ok": True,
+                    "content": json.dumps({
+                        "verdict": "continue",
+                        "reason": "TASK-002 remains",
+                        "next_action": "Start TASK-002.",
+                        "auto_continue": True,
+                    }),
+                }
+
+            stop.call_codex_default = fake_call
+            result = stop.stop_judge({
+                "last_assistant_message": (
+                    "TASK-001 done. Next step: start TASK-002."
+                )
+            })
+            prompt = captured.get("prompt", "")
+            test("long spec prompt includes later task", "TASK-002" in prompt, prompt[:1000])
+            test("long spec prompt includes acceptance criteria",
+                 "Acceptance Criteria" in prompt, prompt[:1000])
+            test("stop prompt distinguishes task done from project done",
+                 "one TASK is done" in prompt and "whole PROJECT_SPEC" in prompt,
+                 prompt[:1000])
+            test("long spec continue still blocks next loop",
+                 result.get("decision") == "block", result)
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+
+
 def test_codex_command_profile_inheritance():
     print("\n[codex exec command]")
     codex_client = _load_hook_module("codex_client")
@@ -300,6 +369,7 @@ def main():
     test_user_prompt_submit()
     test_pre_tool_guard_light_boundary()
     test_stop_auto_continue_and_done_helpers()
+    test_stop_prompt_keeps_development_plan_context()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()
     test_project_path_resolution()

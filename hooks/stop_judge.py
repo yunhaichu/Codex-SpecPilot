@@ -166,6 +166,45 @@ def _parse_llm_response(content):
         return None
 
 
+def _slice_section(text, start_term, end_terms):
+    lower = text.lower()
+    start = lower.find(start_term.lower())
+    if start < 0:
+        return ""
+    end = len(text)
+    for term in end_terms:
+        idx = lower.find(term.lower(), start + len(start_term))
+        if idx >= 0 and idx < end:
+            end = idx
+    return text[start:end].strip()
+
+
+def _compact_project_spec_for_stop(project_spec, limit=6000):
+    """Keep Stop context focused on the task contract, not the whole document."""
+    if not project_spec:
+        return "(no PROJECT_SPEC.md)"
+
+    pieces = []
+    for title, start, ends in (
+        ("Project Mode", "0. Project Mode", ("1. Project Goal",)),
+        ("Project Goal", "1. Project Goal", ("2. Background",)),
+        ("Development Plan", "7. Development Plan", ("8. Acceptance Criteria",)),
+        ("Acceptance Criteria", "8. Acceptance Criteria", ("9. Stop Conditions",)),
+        ("Stop Conditions", "9. Stop Conditions", ("10. Submission Requirements",)),
+    ):
+        section = _slice_section(project_spec, start, ends)
+        if section:
+            pieces.append("## %s\n%s" % (title, section))
+
+    if not pieces:
+        return project_spec[:limit]
+
+    compact = "\n\n".join(pieces)
+    if len(compact) > limit:
+        return compact[:limit] + "\n[PROJECT_SPEC compact context truncated]"
+    return compact
+
+
 def _is_permission_block(verdict, next_action, project_spec):
     """Keep the auto-continue gate mechanical.
 
@@ -201,6 +240,7 @@ def stop_judge(turn_payload):
     # Read PROJECT_SPEC and latest context for LLM prompt
     project_spec = _read_file(_wiki_path("PROJECT_SPEC.md"))
     latest_ctx = _read_file(_wiki_path("latest_context.md"))
+    compact_project_spec = _compact_project_spec_for_stop(project_spec)
 
     # LLM judgment with compact real context. Keep this prompt light because
     # Stop hooks must finish inside Codex hook timeouts.
@@ -209,17 +249,21 @@ def stop_judge(turn_payload):
         "Schema: {\"verdict\":\"pass|continue|revise|done|human_review\","
         "\"reason\":\"brief\",\"next_action\":\"action or empty\","
         "\"auto_continue\":true}\n"
-        "Rules: done only when all acceptance criteria are met; pass for a no-op reply; "
-        "continue/revise when work should proceed; human_review if unsafe or unclear. "
+        "Rules: done only when the whole PROJECT_SPEC is complete, including every "
+        "Development Plan task and final acceptance criteria. If the last assistant "
+        "message says one TASK is done and names another TASK as next step, verdict "
+        "must be continue with that next task as next_action and auto_continue true. "
+        "pass is only for a no-op reply; continue/revise when work should proceed; "
+        "human_review if unsafe or unclear. "
         "Worker must not edit judge-system files: PROJECT_SPEC, RULES, PERMISSIONS, "
         "JUDGE, latest_context, judge_latest, loop_state, guard_log, .codex/hooks.json, hooks/*.py.\n"
         "PROJECT_SPEC:\n```\n%s\n```\n"
         "LATEST_CONTEXT:\n```\n%s\n```\n"
         "LAST_ASSISTANT_MESSAGE:\n```\n%s\n```\n"
         % (
-            project_spec[:1000] if project_spec else "(no PROJECT_SPEC.md)",
+            compact_project_spec,
             latest_ctx[:300] if latest_ctx else "(no latest_context.md)",
-            assistant_msg[:700],
+            assistant_msg[:1200],
         )
     )
     llm_result = call_codex_default(llm_prompt, timeout=120)
