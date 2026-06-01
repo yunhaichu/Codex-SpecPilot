@@ -293,6 +293,71 @@ def test_stop_prompt_keeps_development_plan_context():
             stop.WIKI_DIR = old_wiki
 
 
+def test_stop_loop_limit_counts_stalled_work_only():
+    print("\n[Stop loop progress gate]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        for name, content in {
+            "PROJECT_SPEC.md": (
+                "# PROJECT_SPEC\n\n"
+                "7. Development Plan\n"
+                "* TASK-005: recording flow\n"
+                "* TASK-006: background recording boundary\n\n"
+                "8. Acceptance Criteria\n* All tasks complete.\n"
+            ),
+            "latest_context.md": "# Latest\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":3,"auto_continue":true}',
+        }.items():
+            with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                f.write(content)
+
+        try:
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "continue",
+                    "reason": "TASK-005 is done and TASK-006 remains",
+                    "next_action": "Start TASK-006.",
+                    "auto_continue": True,
+                    "progress_made": True,
+                }),
+            }
+            progressed = stop.stop_judge({
+                "last_assistant_message": "TASK-005 done. Next step: TASK-006."
+            })
+            test("completed task bypasses stale loop count",
+                 progressed.get("decision") == "block", progressed)
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            test("progress resets loop count", data.get("loop_count") == 0, data)
+
+            with open(os.path.join(td, "loop_state.json"), "w", encoding="utf-8") as f:
+                f.write('{"loop_count":3,"auto_continue":true}')
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "continue",
+                    "reason": "same step repeated",
+                    "next_action": "Retry the same action.",
+                    "auto_continue": True,
+                    "progress_made": False,
+                }),
+            }
+            stalled = stop.stop_judge({
+                "last_assistant_message": "Still could not complete the same action."
+            })
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            test("stalled loop limit still requires human review",
+                 data.get("last_verdict") == "human_review" and "systemMessage" in stalled,
+                 (data, stalled))
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+
+
 def test_codex_command_profile_inheritance():
     print("\n[codex exec command]")
     codex_client = _load_hook_module("codex_client")
@@ -370,6 +435,7 @@ def main():
     test_pre_tool_guard_light_boundary()
     test_stop_auto_continue_and_done_helpers()
     test_stop_prompt_keeps_development_plan_context()
+    test_stop_loop_limit_counts_stalled_work_only()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()
     test_project_path_resolution()

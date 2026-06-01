@@ -97,7 +97,8 @@ def _write_context_md(verdict, reason, next_action_text="", auto_continue=False)
 
 
 def _write_json(verdict, reason, auto_continue, next_action, loop_count=0,
-                llm_ok=False, llm_error=None, original_verdict=None, original_next_action=None):
+                llm_ok=False, llm_error=None, original_verdict=None,
+                original_next_action=None, progress_made=None):
     data = {
         "last_verdict": verdict,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -113,6 +114,8 @@ def _write_json(verdict, reason, auto_continue, next_action, loop_count=0,
         data["original_verdict"] = original_verdict
     if original_next_action:
         data["original_next_action"] = original_next_action
+    if progress_made is not None:
+        data["progress_made"] = bool(progress_made)
     with open(_wiki_path("judge_latest.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -248,11 +251,14 @@ def stop_judge(turn_payload):
         "You are Codex-WikiGuard Stop Judge. Return ONLY JSON.\n"
         "Schema: {\"verdict\":\"pass|continue|revise|done|human_review\","
         "\"reason\":\"brief\",\"next_action\":\"action or empty\","
-        "\"auto_continue\":true}\n"
+        "\"auto_continue\":true,\"progress_made\":true}\n"
         "Rules: done only when the whole PROJECT_SPEC is complete, including every "
         "Development Plan task and final acceptance criteria. If the last assistant "
         "message says one TASK is done and names another TASK as next step, verdict "
         "must be continue with that next task as next_action and auto_continue true. "
+        "Set progress_made true when the last turn completed a task, passed validation, "
+        "or advanced the project plan; set it false only when the loop is repeating "
+        "without useful progress. "
         "pass is only for a no-op reply; continue/revise when work should proceed; "
         "human_review if unsafe or unclear. "
         "Worker must not edit judge-system files: PROJECT_SPEC, RULES, PERMISSIONS, "
@@ -283,16 +289,19 @@ def stop_judge(turn_payload):
             reason = parsed.get("reason", DEFAULT_REASON)
             next_action = parsed.get("next_action", "")
             llm_auto_continue = parsed.get("auto_continue", False)
+            progress_made = bool(parsed.get("progress_made", False))
         else:
             verdict = "human_review"
             reason = "LLM returned invalid verdict: %s" % v
             next_action = ""
             llm_auto_continue = False
+            progress_made = False
     else:
         verdict = "human_review"
         reason = "LLM call failed or returned unparseable: %s" % (llm_error or "no content")
         next_action = ""
         llm_auto_continue = False
+        progress_made = False
 
     # Permission gate on auto-continue
     can_continue = False
@@ -304,21 +313,24 @@ def stop_judge(turn_payload):
             reason = "permission policy blocked auto-continue: %s" % next_action
         else:
             loop_count = _read_loop_state()
-            if loop_count >= 3:
+            effective_loop_count = 0 if progress_made else loop_count
+            if effective_loop_count >= 3:
                 can_continue = False
                 verdict = "human_review"
-                reason = "loop limit (3) reached, human_review required"
+                reason = "loop limit (3) reached without progress, human_review required"
             else:
                 can_continue = True
 
     # Write state files
     if can_continue:
         loop_count = _read_loop_state()
-        _write_loop_state(loop_count + 1, True, verdict)
+        next_loop_count = 0 if progress_made else loop_count + 1
+        _write_loop_state(next_loop_count, True, verdict)
         auto_continue = True
         reason_max = next_action[:1200] if next_action else "safe continue loop"
         _write_json(verdict, reason, auto_continue, next_action,
-                    loop_count=loop_count + 1, llm_ok=llm_ok, llm_error=llm_error)
+                    loop_count=next_loop_count, llm_ok=llm_ok, llm_error=llm_error,
+                    progress_made=progress_made)
         _write_md(verdict, reason, assistant_msg, history, next_action)
         _write_context_md(verdict, reason, next_action, auto_continue=True)
         return {
@@ -331,7 +343,7 @@ def stop_judge(turn_payload):
 
     _write_json(verdict, reason, auto_continue, next_action,
                 loop_count=0 if verdict in ("done", "pass", "human_review") else _read_loop_state(),
-                llm_ok=llm_ok, llm_error=llm_error)
+                llm_ok=llm_ok, llm_error=llm_error, progress_made=progress_made)
     _write_md(verdict, reason, assistant_msg, history, next_action)
     _write_context_md(verdict, reason, next_action, auto_continue=False)
 
