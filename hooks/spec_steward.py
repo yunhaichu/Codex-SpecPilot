@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from codex_client import call_codex_default
 from project_paths import wiki_dir
+from secret_scan import find_secret_material
 
 WIKI_DIR = wiki_dir()
 PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
@@ -77,6 +78,9 @@ def validate_project_spec(text):
             missing.append(term)
     if "TASK-" not in text:
         missing.append("TASK-*")
+    secret_findings = find_secret_material(text)
+    for finding in secret_findings:
+        missing.append("secret material: %s" % finding)
     return missing
 
 

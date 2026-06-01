@@ -169,6 +169,10 @@ def _is_allowed_in_self_dev(normalized, basename):
         return True
     if "INJECTION.md" in normalized:
         return True
+    if "PROJECT_SPEC_TEMPLATE.md" in normalized:
+        return True
+    if "COMPLETION_REPORT_TEMPLATE.md" in normalized:
+        return True
     return False
 
 

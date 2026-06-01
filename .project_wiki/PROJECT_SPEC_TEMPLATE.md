@@ -44,7 +44,8 @@
 - 每项 User Requirement 都有对应实现或明确说明。
 - 没有违反 Non-Goals。
 - 没有修改 Protected Scope。
-- 必须生成 COMPLETION_REPORT.md。
+- 完成前必须经过使用者视角体验测评。
+- 最后一次体验测评找不到明显问题或高价值改进后，才生成 COMPLETION_REPORT.md。
 
 ## 9. Stop Conditions
 以下情况必须停止并 human_review：
@@ -54,5 +55,21 @@
 - 需要越过 Protected Scope。
 - 连续 3 次自动 continue 仍未完成。
 
+## GitHub Sync Policy
+必须二选一：
+- Mode: local-only.
+  - No push, tag, release, repository creation, or remote GitHub operation.
+- Mode: github-sync.
+  - Auth method: 说明使用的本地认证方式，不写入 token、key 或 secret 原文。
+  - Repository: owner/name，或说明允许创建的新仓库目标。
+  - Visibility: public 或 private。
+  - Allowed automatic operations: 明确哪些操作可自动执行，例如 commit、push、tag、release；未列出的操作必须 human confirmation。
+  - Credentials: 只记录可用/不可用状态或认证方式描述，不记录 secret。
+
 ## 10. Submission Requirements
-写清楚完成后要提交什么结果、运行什么测试、写什么报告。
+写清楚完成后要提交什么结果、运行什么测试、写什么报告，以及体验测评状态：
+- not run
+- evaluation environment-blocked
+- issues found and converted to spec update
+- issues filtered as low-value/out-of-scope
+- no obvious user-facing issues found

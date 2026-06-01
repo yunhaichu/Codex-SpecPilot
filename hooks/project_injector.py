@@ -30,6 +30,7 @@ HOOK_FILES = (
     "pre_tool_guard.py",
     "project_injector.py",
     "project_paths.py",
+    "secret_scan.py",
     "spec_steward.py",
     "stop_judge.py",
     "user_prompt_submit.py",
@@ -300,6 +301,13 @@ def _managed_wiki_defaults(root, project_info):
     return {name: defaults[name] for name in MANAGED_WIKI_FILES if name in defaults}
 
 
+def _managed_rel_paths():
+    paths = ["hooks/%s" % name for name in HOOK_FILES]
+    paths.append(".codex/hooks.json")
+    paths.extend(".project_wiki/%s" % name for name in MANAGED_WIKI_FILES)
+    return sorted(paths)
+
+
 def _write_manifest(root, src_root, written, updated, skipped, force=False):
     manifest_path = root / ".project_wiki" / MANIFEST_FILE
     data = {
@@ -307,7 +315,7 @@ def _write_manifest(root, src_root, written, updated, skipped, force=False):
         "runtime_version": SPEC_PILOT_RUNTIME_VERSION,
         "source_root": str(src_root),
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "managed_files": sorted(set(written + updated + skipped)),
+        "managed_files": _managed_rel_paths(),
     }
     text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     return _write_if_changed(manifest_path, text, force=force)

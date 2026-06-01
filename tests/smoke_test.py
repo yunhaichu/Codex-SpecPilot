@@ -58,6 +58,24 @@ def _load_module_at(name, path):
     return module
 
 
+def _complete_project_spec(plan="- [ ] TASK-001: Build app", acceptance="- Tests pass."):
+    return (
+        "# PROJECT_SPEC\n\n"
+        "## 0. Project Mode\nsupervised_project_development\n\n"
+        "## 1. Project Goal\nBuild the app.\n\n"
+        "## 2. Background\nLocal supervised project.\n\n"
+        "## 3. User Requirements\n- REQ-001: Complete the Development Plan.\n\n"
+        "## 4. Non-Goals\n- No cloud default.\n\n"
+        "## 5. Allowed Scope\n- src/\n- tests/\n- README.md\n\n"
+        "## 6. Protected Scope\n- .project_wiki/PROJECT_SPEC.md\n- .codex/hooks.json\n- hooks/*.py\n\n"
+        "## 7. Development Plan\n%s\n\n"
+        "## 8. Acceptance Criteria\n%s\n\n"
+        "## 9. Stop Conditions\n- Need user decision.\n\n"
+        "## GitHub Sync Policy\n- Mode: local-only.\n- No push, tag, release, or remote operation.\n\n"
+        "## 10. Submission Requirements\n- Report status.\n"
+    ) % (plan, acceptance)
+
+
 def test_user_prompt_submit():
     print("\n[UserPromptSubmit]")
     r = _run_hook("user_prompt_submit.py", input_text=json.dumps({"prompt": "开始工作"}))
@@ -152,6 +170,21 @@ def test_pre_tool_guard_light_boundary():
             test("self-dev absolute hooks.json path is allowed",
                  hook_config_result == {}, hook_config_result)
 
+            template_result = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: %s\n"
+                        "@@\n"
+                        "+experience evaluation\n"
+                        "*** End Patch\n"
+                    ) % os.path.join(ROOT_DIR, ".project_wiki", "COMPLETION_REPORT_TEMPLATE.md"),
+                },
+            })
+            test("self-dev completion template path is allowed",
+                 template_result == {}, template_result)
+
             with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
                 f.write("# Spec\nsupervised_project_development\n")
             protected_patch = pre.pre_tool_use({
@@ -189,7 +222,7 @@ def test_stop_auto_continue_and_done_helpers():
     with tempfile.TemporaryDirectory() as td:
         stop.WIKI_DIR = td
         for name, content in {
-            "PROJECT_SPEC.md": "# Spec\n- [ ] TASK-001: do work\n",
+            "PROJECT_SPEC.md": _complete_project_spec("- [ ] TASK-001: do work"),
             "latest_context.md": "# Latest\n",
             "JUDGE.md": "# Judge\n",
             "loop_state.json": '{"loop_count":0,"auto_continue":false}',
@@ -212,25 +245,173 @@ def test_stop_auto_continue_and_done_helpers():
             ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
             test("latest_context records enabled auto-continue", "AUTO_CONTINUE: enabled" in ctx)
 
-            stop.call_codex_default = lambda prompt, timeout=120: {
-                "ok": True,
-                "content": json.dumps({
+            responses = [
+                {
                     "verdict": "done",
                     "reason": "all acceptance criteria are satisfied",
                     "next_action": "",
                     "auto_continue": False,
-                }),
+                },
+                {
+                    "decision": "final_done",
+                    "evaluation_status": "no obvious user-facing issues found",
+                    "reason": "user can complete the intended flow",
+                    "findings": [],
+                    "filtered_findings": [],
+                    "change_request": "",
+                    "questions": [],
+                },
+            ]
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps(responses.pop(0)),
             }
             done = stop.stop_judge({"last_assistant_message": "All tasks are complete."})
-            test("done does not block", "systemMessage" in done and "done" in done["systemMessage"])
+            test("done does not block after experience evaluation",
+                 "systemMessage" in done and "experience evaluation" in done["systemMessage"],
+                 done)
             report = open(os.path.join(td, "COMPLETION_REPORT.md"), encoding="utf-8").read()
-            test("done writes completion report", "Stop Hook Done Record" in report)
+            test("done writes completion report after evaluation",
+                 "Stop Hook Done Record" in report and "Experience Evaluation" in report,
+                 report)
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
 
     child = _run_hook("stop_judge.py", child=True)
     test("child stop hook is no-op", json.loads(child.stdout) == {})
+
+
+def test_stop_experience_evaluation_gate():
+    print("\n[Stop experience evaluation]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+
+    def write_base_files(wiki, loop_state='{"loop_count":0,"auto_continue":false}'):
+        report_path = os.path.join(wiki, "COMPLETION_REPORT.md")
+        if os.path.exists(report_path):
+            os.remove(report_path)
+        for name, content in {
+            "PROJECT_SPEC.md": _complete_project_spec(
+                "- [x] TASK-001: Build app",
+                "- User can add and read notes.",
+            ),
+            "latest_context.md": "# Latest\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": loop_state,
+        }.items():
+            with open(os.path.join(wiki, name), "w", encoding="utf-8") as f:
+                f.write(content)
+
+    def run_done_case(wiki, evaluation_response, loop_state='{"loop_count":0,"auto_continue":false}'):
+        write_base_files(wiki, loop_state=loop_state)
+        responses = [
+            {
+                "verdict": "done",
+                "reason": "all tasks and acceptance criteria are complete",
+                "next_action": "",
+                "auto_continue": False,
+                "progress_made": True,
+            },
+            evaluation_response,
+        ]
+
+        def fake_call(prompt, timeout=120):
+            return {"ok": True, "content": json.dumps(responses.pop(0))}
+
+        stop.call_codex_default = fake_call
+        result = stop.stop_judge({"last_assistant_message": "All tasks complete and tests pass."})
+        data = json.load(open(os.path.join(wiki, "judge_latest.json"), encoding="utf-8"))
+        report_path = os.path.join(wiki, "COMPLETION_REPORT.md")
+        report = open(report_path, encoding="utf-8").read() if os.path.exists(report_path) else ""
+        return result, data, report
+
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        try:
+            result, data, report = run_done_case(td, {
+                "decision": "spec_update_required",
+                "evaluation_status": "issues found and converted to spec update",
+                "reason": "new users cannot discover how to create the first note",
+                "findings": ["The empty state gives no path to create the first note."],
+                "filtered_findings": [],
+                "change_request": "Add a task to provide a clear empty-state create-note action.",
+                "questions": [],
+            })
+            test("experience findings enter spec_update_required",
+                 data.get("last_verdict") == "spec_update_required"
+                 and "Spec Steward" in data.get("next_action", "")
+                 and not report,
+                 (result, data, report))
+
+            result, data, report = run_done_case(td, {
+                "decision": "final_done",
+                "evaluation_status": "no obvious user-facing issues found",
+                "reason": "claimed done while still listing a real issue",
+                "findings": ["First-time users cannot discover the primary action."],
+                "filtered_findings": [],
+                "change_request": "Add a task for a visible primary action in the empty state.",
+                "questions": [],
+            })
+            test("actionable findings override mistaken final_done",
+                 data.get("last_verdict") == "spec_update_required"
+                 and "Spec Steward" in data.get("next_action", "")
+                 and not report,
+                 (result, data, report))
+
+            result, data, report = run_done_case(td, {
+                "decision": "final_done",
+                "evaluation_status": "issues filtered as low-value/out-of-scope",
+                "reason": "core user flow works; only cosmetic preferences remain",
+                "findings": [],
+                "filtered_findings": ["Button color preference is low-value polish."],
+                "change_request": "",
+                "questions": [],
+            })
+            test("low-value evaluation suggestions still allow final done",
+                 data.get("last_verdict") == "done"
+                 and "Button color preference" in report
+                 and "Stop Hook Done Record" in report,
+                 (result, data, report))
+
+            result, data, report = run_done_case(td, {
+                "decision": "human_review",
+                "evaluation_status": "evaluation environment-blocked",
+                "reason": "the app cannot be launched from available evidence",
+                "findings": [],
+                "filtered_findings": [],
+                "change_request": "",
+                "questions": ["Can the app be launched locally for evaluation?"],
+            })
+            test("blocked experience evaluation requires human review",
+                 data.get("last_verdict") == "human_review"
+                 and "COMPLETION_REPORT" not in report,
+                 (result, data, report))
+
+            write_base_files(
+                td,
+                loop_state='{"loop_count":0,"auto_continue":false,"experience_evaluation_count":3}',
+            )
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "done",
+                    "reason": "all tasks complete again",
+                    "next_action": "",
+                    "auto_continue": False,
+                    "progress_made": True,
+                }),
+            }
+            result = stop.stop_judge({"last_assistant_message": "All tasks complete again."})
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            test("experience evaluation loop limit fails safe",
+                 data.get("last_verdict") == "human_review"
+                 and "loop limit" in data.get("reason", ""),
+                 (result, data))
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
 
 
 def test_stop_prompt_keeps_development_plan_context():
@@ -247,6 +428,8 @@ def test_stop_prompt_keeps_development_plan_context():
             "0. Project Mode\nsupervised_project_development\n\n"
             "1. Project Goal\nBuild a local iOS app.\n\n"
             "2. Background\n%s\n\n"
+            "5. Allowed Scope\n* App files.\n\n"
+            "6. Protected Scope\n* .project_wiki/PROJECT_SPEC.md\n* .codex/hooks.json\n* hooks/*.py\n\n"
             "7. Development Plan\n"
             "* TASK-001: Create app skeleton\n"
             "    * Acceptance: simulator launches the home screen.\n"
@@ -313,12 +496,10 @@ def test_stop_loop_limit_counts_stalled_work_only():
     with tempfile.TemporaryDirectory() as td:
         stop.WIKI_DIR = td
         for name, content in {
-            "PROJECT_SPEC.md": (
-                "# PROJECT_SPEC\n\n"
-                "7. Development Plan\n"
+            "PROJECT_SPEC.md": _complete_project_spec(
                 "* TASK-005: recording flow\n"
-                "* TASK-006: background recording boundary\n\n"
-                "8. Acceptance Criteria\n* All tasks complete.\n"
+                "* TASK-006: background recording boundary",
+                "* All tasks complete.",
             ),
             "latest_context.md": "# Latest\n",
             "JUDGE.md": "# Judge\n",
@@ -379,10 +560,9 @@ def test_stop_spec_update_required_pauses_worker():
     with tempfile.TemporaryDirectory() as td:
         stop.WIKI_DIR = td
         for name, content in {
-            "PROJECT_SPEC.md": (
-                "# PROJECT_SPEC\n\n"
-                "7. Development Plan\n"
-                "* TASK-001: current work\n"
+            "PROJECT_SPEC.md": _complete_project_spec(
+                "* TASK-001: current work",
+                "* Confirmed acceptance criteria pass.",
             ),
             "latest_context.md": "# Latest\n",
             "JUDGE.md": "# Judge\n",
@@ -436,6 +616,114 @@ def test_stop_spec_update_required_pauses_worker():
                  "Questions for the user" in result.get("systemMessage", "")
                  and "Which acceptance criteria changed?" in result.get("systemMessage", ""),
                  result)
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+
+
+def test_stop_github_sync_policy_gate():
+    print("\n[Stop GitHub sync policy]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+
+    def project_spec(policy_text):
+        return (
+            "# PROJECT_SPEC\n\n"
+            "## 0. Project Mode\nsupervised_project_development\n\n"
+            "## 1. Project Goal\nBuild the app.\n\n"
+            "## 5. Allowed Scope\n- src/\n- tests/\n\n"
+            "## 6. Protected Scope\n- .project_wiki/PROJECT_SPEC.md\n- .codex/hooks.json\n- hooks/*.py\n\n"
+            "## 7. Development Plan\n- [ ] TASK-001: Build app\n\n"
+            "## 8. Acceptance Criteria\n- Tests pass.\n\n"
+            "## 9. Stop Conditions\n- Need user decision.\n\n"
+            "%s\n\n"
+            "## 10. Submission Requirements\n- Report status.\n"
+        ) % policy_text
+
+    def run_case(wiki, policy_text, next_action):
+        for name, content in {
+            "PROJECT_SPEC.md": project_spec(policy_text),
+            "latest_context.md": "# Latest\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":0,"auto_continue":false}',
+        }.items():
+            with open(os.path.join(wiki, name), "w", encoding="utf-8") as f:
+                f.write(content)
+        stop.call_codex_default = lambda prompt, timeout=120: {
+            "ok": True,
+            "content": json.dumps({
+                "verdict": "continue",
+                "reason": "checkpoint requested",
+                "next_action": next_action,
+                "auto_continue": True,
+                "progress_made": True,
+            }),
+        }
+        result = stop.stop_judge({"last_assistant_message": "Ready for checkpoint."})
+        data = json.load(open(os.path.join(wiki, "judge_latest.json"), encoding="utf-8"))
+        return result, data
+
+    with tempfile.TemporaryDirectory() as td:
+        wiki = os.path.join(td, ".project_wiki")
+        os.makedirs(wiki)
+        stop.WIKI_DIR = wiki
+        try:
+            local_only = (
+                "## GitHub Sync Policy\n"
+                "- Mode: local-only.\n"
+                "- No push, tag, release, or remote operation.\n"
+            )
+            result, data = run_case(wiki, local_only, "Push changes to GitHub remote.")
+            test("local-only policy blocks remote push",
+                 data.get("last_verdict") == "human_review"
+                 and "local-only" in data.get("reason", ""),
+                 (result, data))
+
+            result, data = run_case(wiki, "", "Create GitHub release tag.")
+            test("missing GitHub policy blocks remote action",
+                 data.get("last_verdict") == "human_review"
+                 and "no GitHub Sync Policy" in data.get("reason", ""),
+                 (result, data))
+
+            full_policy = (
+                "## GitHub Sync Policy\n"
+                "- Mode: github-sync.\n"
+                "- Auth method: local gh CLI login.\n"
+                "- Credentials: available through local gh auth.\n"
+                "- Repository: owner/name.\n"
+                "- Visibility: private.\n"
+                "- Allowed automatic operations: push, tag.\n"
+                "- Release requires human confirmation.\n"
+            )
+            result, data = run_case(wiki, full_policy, "Push changes to GitHub remote.")
+            test("complete policy allows configured auto push",
+                 result.get("decision") == "block"
+                 and data.get("last_verdict") == "continue",
+                 (result, data))
+
+            unavailable = full_policy.replace(
+                "Credentials: available through local gh auth.",
+                "Credentials unavailable: gh auth is not configured.",
+            )
+            result, data = run_case(wiki, unavailable, "Push changes to GitHub remote.")
+            test("unavailable credentials block remote action",
+                 data.get("last_verdict") == "human_review"
+                 and "credentials are unavailable" in data.get("reason", ""),
+                 (result, data))
+
+            confirm_required = full_policy.replace(
+                "Allowed automatic operations: push, tag.",
+                "Allowed automatic operations: commit only.",
+            ).replace(
+                "Release requires human confirmation.",
+                "Push requires human confirmation. Tag requires human confirmation. Release requires human confirmation.",
+            )
+            result, data = run_case(wiki, confirm_required, "Tag release v1.0 and push tag.")
+            test("human-confirmation policy blocks auto tag or release",
+                 data.get("last_verdict") == "human_review"
+                 and "requires human confirmation" in data.get("reason", ""),
+                 (result, data))
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
@@ -497,6 +785,86 @@ def test_stop_onboarding_steward_writes_spec():
             test("onboarding completion disables auto-continue",
                  "AUTO_CONTINUE: disabled" in ctx,
                  ctx)
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+
+    fake_classic_token = "ghp_" + "1234567890abcdefghijklmnopqrstu"
+    secret_spec = completed_spec.replace(
+        "- Mode: local-only.",
+        "- Mode: github-sync.\n- Token: " + fake_classic_token,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = os.path.join(td, ".project_wiki")
+        try:
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "decision": "write_spec",
+                    "reason": "bad secret-bearing spec",
+                    "questions": [],
+                    "updated_project_spec": secret_spec,
+                }),
+            }
+            result = stop.stop_judge({
+                "last_assistant_message": "Confirmed GitHub sync but included a token by mistake."
+            })
+            spec_path = os.path.join(td, ".project_wiki", "PROJECT_SPEC.md")
+            written = open(spec_path, encoding="utf-8").read()
+            data = json.load(open(os.path.join(td, ".project_wiki", "judge_latest.json"), encoding="utf-8"))
+            test("onboarding rejects PROJECT_SPEC with secret material",
+                 data.get("last_verdict") == "onboarding_required"
+                 and "secret material" in data.get("reason", "")
+                 and fake_classic_token[:14] not in written,
+                 (result, data, written[:1000]))
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+
+
+def test_stop_incomplete_project_spec_enters_onboarding():
+    print("\n[Stop incomplete PROJECT_SPEC onboarding]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    captured = {}
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = os.path.join(td, ".project_wiki")
+        os.makedirs(stop.WIKI_DIR)
+        with open(os.path.join(stop.WIKI_DIR, "PROJECT_SPEC.md"), "w", encoding="utf-8") as f:
+            f.write("# PROJECT_SPEC\n\n## 1. Project Goal\nBuild something useful.\n")
+        try:
+            def fake_call(prompt, timeout=120):
+                captured["prompt"] = prompt
+                return {
+                    "ok": True,
+                    "content": json.dumps({
+                        "decision": "ask_user",
+                        "reason": "missing Allowed Scope, Protected Scope, plan, and acceptance criteria",
+                        "questions": [
+                            "Codex 允许修改哪些具体目录和文件？",
+                            "哪些文件或目录必须保护？",
+                        ],
+                        "updated_project_spec": "",
+                    }),
+                }
+
+            stop.call_codex_default = fake_call
+            result = stop.stop_judge({
+                "last_assistant_message": "The user said start work, but the task contract is incomplete."
+            })
+            data = json.load(open(os.path.join(stop.WIKI_DIR, "judge_latest.json"), encoding="utf-8"))
+            ctx = open(os.path.join(stop.WIKI_DIR, "latest_context.md"), encoding="utf-8").read()
+            test("incomplete PROJECT_SPEC goes through onboarding steward",
+                 "Onboarding Steward" in captured.get("prompt", "")
+                 and data.get("last_verdict") == "onboarding_required"
+                 and data.get("auto_continue") is False,
+                 (captured.get("prompt", "")[:1000], data))
+            test("incomplete PROJECT_SPEC onboarding asks user instead of continuing",
+                 "systemMessage" in result
+                 and "Questions for the user" in result.get("systemMessage", "")
+                 and "AUTO_CONTINUE: disabled" in ctx,
+                 (result, ctx))
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
@@ -592,11 +960,51 @@ def test_spec_steward_controlled_update_flow():
             test("spec steward rejects incomplete proposed spec",
                  bad.get("ok") is False and "missing" in bad,
                  bad)
+
+            fake_fine_grained_token = "github_pat_" + "1234567890abcdefghijklmnopqrstuvwxyz"
+            secret_spec = updated_spec.replace(
+                "- Mode: local-only.",
+                "- Mode: github-sync.\n- Token: " + fake_fine_grained_token,
+            )
+            steward.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "decision": "apply",
+                    "reason": "bad secret spec",
+                    "questions": [],
+                    "update_summary": "",
+                    "updated_project_spec": secret_spec,
+                }),
+            }
+            secret = steward.propose_spec_update("Store GitHub token.", apply_update=True)
+            current = open(steward.PROJECT_SPEC_PATH, encoding="utf-8").read()
+            test("spec steward rejects PROJECT_SPEC with secret material",
+                 secret.get("ok") is False
+                 and any("secret material" in item for item in secret.get("missing", []))
+                 and fake_fine_grained_token[:22] not in current,
+                 (secret, current))
         finally:
             steward.call_codex_default = old_call
             steward.WIKI_DIR = old_wiki
             steward.PROJECT_SPEC_PATH = old_spec_path
             steward.LATEST_CONTEXT_PATH = old_latest_path
+
+
+def test_readme_task006_role_boundaries():
+    print("\n[README role boundaries]")
+    readme = open(os.path.join(ROOT_DIR, "README.md"), encoding="utf-8").read()
+    expected_terms = [
+        "Role Boundaries",
+        "Requirement parsing",
+        "Spec Steward",
+        "Planner",
+        "Codex Worker",
+        "Stop Hook",
+        "spec_update_required",
+        "角色分工",
+    ]
+    missing = [term for term in expected_terms if term not in readme]
+    test("README documents TASK-006 role boundaries", not missing, missing)
 
 
 def test_codex_command_profile_inheritance():
@@ -669,6 +1077,30 @@ def test_project_path_resolution():
             test("cwd without wiki can be selected for auto-onboarding",
                  os.path.realpath(project_paths.wiki_dir()) == expected,
                  project_paths.wiki_dir())
+
+        with tempfile.TemporaryDirectory() as td:
+            os.mkdir(os.path.join(td, ".git"))
+            nested = os.path.join(td, "src", "feature")
+            os.makedirs(nested)
+            with open(os.path.join(nested, "work.txt"), "w", encoding="utf-8") as f:
+                f.write("nested work\n")
+            os.chdir(nested)
+            expected = os.path.realpath(os.path.join(td, ".project_wiki"))
+            test("nested repo cwd resolves wiki at repo root",
+                 os.path.realpath(project_paths.wiki_dir()) == expected,
+                 project_paths.wiki_dir())
+
+        with tempfile.TemporaryDirectory() as td:
+            os.makedirs(os.path.join(td, ".project_wiki"))
+            nested = os.path.join(td, "src", "feature")
+            os.makedirs(nested)
+            with open(os.path.join(nested, "work.txt"), "w", encoding="utf-8") as f:
+                f.write("nested work\n")
+            os.chdir(nested)
+            expected = os.path.realpath(os.path.join(td, ".project_wiki"))
+            test("nested cwd uses ancestor project wiki without repo marker",
+                 os.path.realpath(project_paths.wiki_dir()) == expected,
+                 project_paths.wiki_dir())
     finally:
         os.chdir(old_cwd)
         if old_project_dir is not None:
@@ -734,7 +1166,7 @@ def test_project_injector_bootstrap_and_onboarding():
             injected = user_prompt.user_prompt_submit({"prompt": "开始工作"})
             ctx = injected.get("hookSpecificOutput", {}).get("additionalContext", "")
             test("placeholder spec triggers onboarding injection",
-                 "Project Onboarding Rule" in ctx and "Do not edit business code" in ctx,
+                 "Project Onboarding Rule" in ctx and "business code" in ctx,
                  ctx[:1000])
             test("onboarding injection includes GitHub local-only default",
                  "GitHub" in ctx and "local-only" in ctx,
@@ -742,6 +1174,16 @@ def test_project_injector_bootstrap_and_onboarding():
             test("start work is deferred during onboarding",
                  "Start Work Deferred" in ctx and "Start Work Instruction" not in ctx,
                  ctx[:1000])
+
+            with open(os.path.join(existing_dir, ".project_wiki", "PROJECT_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write("# PROJECT_SPEC\n\n## 1. Project Goal\nBuild something useful.\n")
+            injected = user_prompt.user_prompt_submit({"prompt": "开始工作"})
+            ctx = injected.get("hookSpecificOutput", {}).get("additionalContext", "")
+            test("incomplete PROJECT_SPEC without marker still defers start work",
+                 "Project Onboarding Rule" in ctx
+                 and "Start Work Deferred" in ctx
+                 and "Start Work Instruction" not in ctx,
+                 ctx[:1200])
         finally:
             user_prompt.WIKI_DIR = old_wiki
 
@@ -761,6 +1203,30 @@ def test_project_injector_bootstrap_and_onboarding():
         finally:
             user_prompt.WIKI_DIR = old_wiki
 
+    with tempfile.TemporaryDirectory() as repo_dir:
+        os.mkdir(os.path.join(repo_dir, ".git"))
+        nested = os.path.join(repo_dir, "src", "feature")
+        os.makedirs(nested)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = HOOKS_DIR
+        env.pop("CODEX_SPECPILOT_PROJECT_DIR", None)
+        env.pop("CODEX_SPECPILOT_CHILD", None)
+        result = subprocess.run(
+            [sys.executable, os.path.join(HOOKS_DIR, "user_prompt_submit.py")],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=nested,
+            input=json.dumps({"prompt": "接管这个项目"}),
+        )
+        root_spec = os.path.join(repo_dir, ".project_wiki", "PROJECT_SPEC.md")
+        nested_spec = os.path.join(nested, ".project_wiki", "PROJECT_SPEC.md")
+        test("nested repo auto-onboarding writes PROJECT_SPEC at repo root",
+             result.returncode == 0
+             and os.path.isfile(root_spec)
+             and not os.path.exists(nested_spec),
+             result.stderr or result.stdout)
+
 
 def test_project_injector_runtime_upgrade():
     print("\n[Runtime upgrade]")
@@ -776,6 +1242,18 @@ def test_project_injector_runtime_upgrade():
         spec_path = os.path.join(target_dir, ".project_wiki", "PROJECT_SPEC.md")
         with open(spec_path, "w", encoding="utf-8") as f:
             f.write("# PROJECT_SPEC\n\nCUSTOM CONTRACT MUST STAY\n")
+
+        protected_state = {
+            "JUDGE.md": "# custom judge state\n",
+            "latest_context.md": "# custom latest context\n",
+            "judge_latest.json": '{"custom": true}\n',
+            "loop_state.json": '{"loop_count": 99}\n',
+            "guard_log.jsonl": '{"custom": true}\n',
+            "COMPLETION_REPORT.md": "# custom completion report\n",
+        }
+        for name, content in protected_state.items():
+            with open(os.path.join(target_dir, ".project_wiki", name), "w", encoding="utf-8") as f:
+                f.write(content)
 
         hook_path = os.path.join(target_dir, "hooks", "user_prompt_submit.py")
         with open(hook_path, "w", encoding="utf-8") as f:
@@ -795,11 +1273,34 @@ def test_project_injector_runtime_upgrade():
         test("runtime upgrade preserves PROJECT_SPEC",
              "CUSTOM CONTRACT MUST STAY" in open(spec_path, encoding="utf-8").read(),
              open(spec_path, encoding="utf-8").read())
+        preserved = {
+            name: open(os.path.join(target_dir, ".project_wiki", name), encoding="utf-8").read()
+            for name in protected_state
+        }
+        test("runtime upgrade preserves judge state and completion report",
+             preserved == protected_state,
+             preserved)
 
         manifest_path = os.path.join(target_dir, ".project_wiki", "specpilot_manifest.json")
         manifest = json.load(open(manifest_path, encoding="utf-8"))
         test("runtime manifest records source root",
              manifest.get("source_root") == ROOT_DIR and manifest.get("runtime_version"),
+             manifest)
+        managed_files = manifest.get("managed_files", [])
+        protected_names = {
+            ".project_wiki/PROJECT_SPEC.md",
+            ".project_wiki/JUDGE.md",
+            ".project_wiki/latest_context.md",
+            ".project_wiki/judge_latest.json",
+            ".project_wiki/loop_state.json",
+            ".project_wiki/guard_log.jsonl",
+            ".project_wiki/COMPLETION_REPORT.md",
+        }
+        test("runtime manifest excludes protected state files",
+             protected_names.isdisjoint(set(managed_files))
+             and "hooks/user_prompt_submit.py" in managed_files
+             and "hooks/secret_scan.py" in managed_files
+             and ".project_wiki/INJECTION.md" in managed_files,
              manifest)
 
 
@@ -821,6 +1322,12 @@ def test_macos_installer_config_generation():
         test("installer uses discovered repo root",
              ROOT_DIR in text and "Codex-SpecPilot" in text,
              text[:1000])
+        test("installer config stores no credential secret material",
+             all(term not in text.lower() for term in ("token", "api key", "private key", "password")),
+             text[:1000])
+        test("installer config has no GitHub remote operation",
+             all(term not in text.lower() for term in ("git push", "gh ", "release", "git tag")),
+             text[:1000])
         test("installer writes split PreToolUse matchers",
              len(data.get("hooks", {}).get("PreToolUse", [])) == 4,
              data)
@@ -835,11 +1342,15 @@ def main():
     test_user_prompt_submit()
     test_pre_tool_guard_light_boundary()
     test_stop_auto_continue_and_done_helpers()
+    test_stop_experience_evaluation_gate()
     test_stop_prompt_keeps_development_plan_context()
     test_stop_loop_limit_counts_stalled_work_only()
     test_stop_spec_update_required_pauses_worker()
+    test_stop_github_sync_policy_gate()
     test_stop_onboarding_steward_writes_spec()
+    test_stop_incomplete_project_spec_enters_onboarding()
     test_spec_steward_controlled_update_flow()
+    test_readme_task006_role_boundaries()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()
     test_project_path_resolution()

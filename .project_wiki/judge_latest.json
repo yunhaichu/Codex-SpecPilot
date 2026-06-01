@@ -1,10 +1,19 @@
 {
-  "last_verdict": "continue",
-  "timestamp": "2026-06-01T07:04:16.163373+00:00",
-  "reason": "Spec Steward applied the requested PROJECT_SPEC update and validation passed; Development Plan still has unfinished tasks, with TASK-007 now added and pending.",
-  "auto_continue": true,
-  "next_action": "Proceed with TASK-007: support Hook automatic takeover of empty and legacy projects without complete PROJECT_SPEC, including onboarding deferral and controlled PROJECT_SPEC writing tests.",
+  "last_verdict": "done",
+  "timestamp": "2026-06-01T09:17:00.867064+00:00",
+  "reason": "Experience evaluation passed: Available completion evidence shows the target workflow was exercised end-to-end: TASK-010 evaluation gate passed, TASK-005 unattended trial reached final_done from a single start command, smoke tests passed, and GitHub behavior remained local-only as specified. No obvious target-user blocking issue is visible from the provided evidence.",
+  "auto_continue": false,
+  "next_action": "",
   "loop_count": 0,
   "llm_ok": true,
-  "progress_made": true
+  "experience_evaluation": {
+    "decision": "final_done",
+    "status": "no obvious user-facing issues found",
+    "reason": "Available completion evidence shows the target workflow was exercised end-to-end: TASK-010 evaluation gate passed, TASK-005 unattended trial reached final_done from a single start command, smoke tests passed, and GitHub behavior remained local-only as specified. No obvious target-user blocking issue is visible from the provided evidence.",
+    "findings": [],
+    "filtered_findings": [
+      "Running tests from inside .project_wiki may be less convenient, but the evidence indicates this is not the target user path and was already filtered as out-of-scope."
+    ],
+    "change_request": ""
+  }
 }

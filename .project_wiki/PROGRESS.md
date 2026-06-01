@@ -197,3 +197,63 @@ Conclusion:
   - The clean e2e still passed because Codex used scoped shell edits within Allowed Scope.
   - This was not fixed because the requested pass only allowed minimal hook loading/trust/timeout/environment changes.
 
+## TASK-005 real unattended loop trial with experience gate (2026-06-01)
+- Result: real-world verified pass.
+- Trial command:
+  - `codex exec --enable hooks --dangerously-bypass-hook-trust --skip-git-repo-check --json -C examples/minimal_supervised_project '开始工作'`
+  - Exit code: 0.
+  - Thread id: `019e8257-82e7-7940-82c2-f5c6cf8ca76f`.
+- Direct loop evidence:
+  - A single `开始工作` prompt drove TASK-001, TASK-002, TASK-003, final validation, completion report writing, and final Stop judgment.
+  - TASK-001 modified `examples/minimal_supervised_project/src/calculator.py`.
+  - TASK-002 modified `examples/minimal_supervised_project/tests/test_calculator.py`.
+  - TASK-003 modified `examples/minimal_supervised_project/README.md`.
+  - Final completion step modified `examples/minimal_supervised_project/.project_wiki/COMPLETION_REPORT.md`.
+- TASK-010 experience evaluation evidence:
+  - `examples/minimal_supervised_project/.project_wiki/judge_latest.json`: `last_verdict=done`, `llm_ok=true`, `auto_continue=false`.
+  - `experience_evaluation.decision=final_done`.
+  - `experience_evaluation.status=no obvious user-facing issues found`.
+  - `examples/minimal_supervised_project/.project_wiki/COMPLETION_REPORT.md` contains a Stop Hook Done Record plus Experience Evaluation section.
+  - `examples/minimal_supervised_project/.project_wiki/loop_state.json`: `last_verdict=done`, `loop_count=0`, `experience_evaluation_count=0`.
+- Validation:
+  - In example project: `python run_tests.py` passed, 2 tests.
+  - In SpecPilot repo: `python3 tests/smoke_test.py` passed, 84 tests.
+- Runtime self-update evidence:
+  - Hook runtime self-update created/refreshed managed files in `examples/minimal_supervised_project`: `.codex/hooks.json`, `hooks/*.py`, static `.project_wiki` template/instruction files, and `specpilot_manifest.json`.
+  - Hook-owned judge state files were produced in the example project: `JUDGE.md`, `judge_latest.json`, `latest_context.md`, `loop_state.json`, `guard_log.jsonl`.
+  - The example task contract `PROJECT_SPEC.md` was not modified.
+- Notes:
+  - Unrelated Codex warnings appeared during the run: invalid YAML in `~/.codex/skills/gpt-researcher/SKILL.md`, deprecated `[features].codex_hooks`, plugin icon path warnings, and rollout state-db warnings.
+  - GitHub sync status: local-only / no remote operation attempted.
+
+## TASK-010 coverage plus TASK-005 repeat real trial (2026-06-01)
+- Result: real-world verified pass.
+- TASK-010 coverage status:
+  - Full smoke coverage passed after the experience-evaluation guard was strengthened.
+  - `python3 tests/smoke_test.py`: passed, 93 tests.
+  - Covered paths include actionable findings entering `spec_update_required`, mistaken `final_done` with actionable findings being overridden to `spec_update_required`, low-value/out-of-scope suggestions allowing final done, environment-blocked evaluation requiring `human_review`, and evaluation loop limit fail-safe.
+- Trial command:
+  - `codex exec --enable hooks --dangerously-bypass-hook-trust --skip-git-repo-check --json -C examples/minimal_supervised_project '开始工作'`
+  - Exit code: 0.
+  - Thread id: `019e8270-27fd-7e62-ad77-a22a950807b1`.
+- Direct loop evidence:
+  - A single `开始工作` prompt drove the example through TASK-001, TASK-002, TASK-003, completion-report regeneration, and final Stop judgment.
+  - The example was already mostly complete before this repeat trial; TASK-001 validated existing `add` / `subtract` implementation without source rewrite.
+  - TASK-002 modified `examples/minimal_supervised_project/tests/test_calculator.py` by adding zero-value test coverage.
+  - TASK-003 modified `examples/minimal_supervised_project/README.md` with the module purpose and `python run_tests.py` test command.
+  - Completion step regenerated `examples/minimal_supervised_project/.project_wiki/COMPLETION_REPORT.md`.
+- TASK-010 experience evaluation evidence:
+  - `examples/minimal_supervised_project/.project_wiki/judge_latest.json`: `last_verdict=done`, `llm_ok=true`, `auto_continue=false`.
+  - `experience_evaluation.decision=final_done`.
+  - `experience_evaluation.status=no obvious user-facing issues found`.
+  - `experience_evaluation.filtered_findings` contains one filtered out-of-scope suggestion about running the test runner from inside `.project_wiki`; it was not converted to new requirements.
+  - `examples/minimal_supervised_project/.project_wiki/loop_state.json`: `last_verdict=done`, `loop_count=0`, `experience_evaluation_count=0`.
+  - `examples/minimal_supervised_project/.project_wiki/COMPLETION_REPORT.md` contains the Stop Hook Done Record and Experience Evaluation section from `2026-06-01T09:12:01Z`.
+- Validation:
+  - In example project: `python run_tests.py` passed, 2 tests.
+  - In SpecPilot repo before the real trial: `python3 tests/smoke_test.py` passed, 93 tests.
+  - After recording the repeat-trial evidence: example `python run_tests.py` still passed, 2 tests; SpecPilot `python3 tests/smoke_test.py` still passed, 93 tests.
+- GitHub sync status: local-only / no remote operation attempted.
+- Notes:
+  - Unrelated Codex warnings appeared during the run: invalid YAML in `~/.codex/skills/gpt-researcher/SKILL.md`, deprecated `[features].codex_hooks`, and plugin icon path warnings.
+  - Hook runtime self-update files and hook-owned state files in the example project remain generated artifacts and were not manually reverted.

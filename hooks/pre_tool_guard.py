@@ -124,6 +124,7 @@ def _is_self_dev_allowed_supervision_target(path, project_spec):
     return basename in {
         "PROJECT_SPEC.md",
         "PROJECT_SPEC_TEMPLATE.md",
+        "COMPLETION_REPORT_TEMPLATE.md",
         "INJECTION.md",
     }
 
@@ -239,6 +240,11 @@ def pre_tool_use(turn_payload):
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }}
+    if file_paths and all(
+        is_supervision_file(fp) and _is_self_dev_allowed_supervision_target(fp, project_spec)
+        for fp in file_paths
+    ):
+        return {}
 
     # 2. Read-only commands should not pay for an AI judgment.
     if command and not file_paths and not command_has_write_intent(command):

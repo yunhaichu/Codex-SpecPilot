@@ -14,6 +14,10 @@ PROJECT_MARKERS = (
     "Package.swift",
 )
 
+STRONG_PROJECT_MARKERS = tuple(
+    name for name in PROJECT_MARKERS if name != ".codex"
+)
+
 IGNORED_LOCAL_NAMES = {
     ".DS_Store",
     ".project_wiki",
@@ -25,6 +29,15 @@ IGNORED_LOCAL_NAMES = {
 
 def _has_project_marker(path):
     if any((path / name).exists() for name in PROJECT_MARKERS):
+        return True
+    try:
+        return any(child.name.endswith(".xcodeproj") for child in path.iterdir())
+    except OSError:
+        return False
+
+
+def _has_strong_project_marker(path):
+    if any((path / name).exists() for name in STRONG_PROJECT_MARKERS):
         return True
     try:
         return any(child.name.endswith(".xcodeproj") for child in path.iterdir())
@@ -51,6 +64,10 @@ def _is_empty_dir(path):
         return False
 
 
+def _has_project_wiki(path):
+    return (path / ".project_wiki").is_dir()
+
+
 def _find_owner(start, predicate):
     home = Path.home().resolve()
     for path in _ancestors_from(start):
@@ -73,12 +90,22 @@ def project_root():
         return Path(env_dir).expanduser().resolve()
 
     cwd = Path(os.getcwd()).resolve()
-    if (cwd / ".project_wiki").is_dir():
+    if _has_project_wiki(cwd):
         return cwd
 
-    if cwd != fallback and not _has_project_marker(cwd):
-        if _is_empty_dir(cwd) or _has_project_content(cwd):
-            return cwd
+    marker_owner = _find_owner(cwd, _has_strong_project_marker)
+    if marker_owner:
+        return marker_owner
+
+    if cwd != fallback and _is_empty_dir(cwd):
+        return cwd
+
+    wiki_owner = _find_owner(cwd, _has_project_wiki)
+    if wiki_owner:
+        return wiki_owner
+
+    if cwd != fallback and _has_project_content(cwd):
+        return cwd
 
     marker_owner = _find_owner(cwd, _has_project_marker)
     if marker_owner:

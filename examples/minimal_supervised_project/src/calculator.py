@@ -3,9 +3,9 @@
 
 def add(a, b):
     """Return sum of a and b."""
-    pass
+    return a + b
 
 
 def subtract(a, b):
     """Return difference of a and b."""
-    pass
+    return a - b

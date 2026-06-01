@@ -4,3 +4,16 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Runtime artifacts generated when example projects are exercised.
+examples/*/.codex/
+examples/*/hooks/
+examples/*/.project_wiki/COMPLETION_REPORT_TEMPLATE.md
+examples/*/.project_wiki/JUDGE.md
+examples/*/.project_wiki/PROJECT_ONBOARDING.md
+examples/*/.project_wiki/PROJECT_SPEC_TEMPLATE.md
+examples/*/.project_wiki/guard_log.jsonl
+examples/*/.project_wiki/judge_latest.json
+examples/*/.project_wiki/latest_context.md
+examples/*/.project_wiki/loop_state.json
+examples/*/.project_wiki/specpilot_manifest.json

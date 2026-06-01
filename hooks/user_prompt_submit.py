@@ -20,6 +20,14 @@ PROJECT_SPEC_FILE = "PROJECT_SPEC.md"
 PROJECT_ONBOARDING_FILE = "PROJECT_ONBOARDING.md"
 FALLBACK_FILES = ["HOME.md", "RULES.md", "CURRENT_TASK.md", "JUDGE.md"]
 MAX_CONTEXT_CHARS = 6000
+REQUIRED_PROJECT_SPEC_TERMS = (
+    "Project Goal",
+    "Allowed Scope",
+    "Protected Scope",
+    "Development Plan",
+    "Acceptance Criteria",
+    "TASK-",
+)
 
 GOAL_CHANGE_RULE = """
 
@@ -35,14 +43,14 @@ modify PROJECT_SPEC.md itself.
 ONBOARDING_RULE = """
 
 ### Project Onboarding Rule ###
-If PROJECT_SPEC.md is missing or contains NEEDS_USER_CONFIRMATION, the project
-is not ready for worker development. Do not edit business code. Interview the
-user with at most 5 high-signal questions per round. In every onboarding reply,
-summarize the confirmed facts so far. When enough information is confirmed,
-output a complete PROJECT_SPEC candidate with concrete Allowed Scope,
-Protected Scope, Development Plan, and Acceptance Criteria. Codex Worker must
-not write PROJECT_SPEC.md directly; the controlled SpecPilot Hook flow writes
-the task contract.
+If PROJECT_SPEC.md is missing, contains NEEDS_USER_CONFIRMATION, or lacks core
+task-contract sections, the project is not ready for worker development. Do not
+edit business code. Interview the user with at most 5 high-signal questions per
+round. In every onboarding reply, summarize the confirmed facts so far. When
+enough information is confirmed, output a complete PROJECT_SPEC candidate with
+concrete Allowed Scope, Protected Scope, Development Plan, and Acceptance
+Criteria. Codex Worker must not write PROJECT_SPEC.md directly; the controlled
+SpecPilot Hook flow writes the task contract.
 
 GitHub sync must be decided during onboarding. Ask whether the user wants
 GitHub upload/sync. If not, default to local-only. If yes, ask for auth method
@@ -110,7 +118,9 @@ def _project_spec_needs_onboarding():
     spec = _read_file(PROJECT_SPEC_FILE)
     if spec is None:
         return True
-    return "NEEDS_USER_CONFIRMATION" in spec
+    if "NEEDS_USER_CONFIRMATION" in spec:
+        return True
+    return any(term not in spec for term in REQUIRED_PROJECT_SPEC_TERMS)
 
 
 def user_prompt_submit(turn_payload):

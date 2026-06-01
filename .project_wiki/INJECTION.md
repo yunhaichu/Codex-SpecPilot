@@ -52,6 +52,11 @@ During development, the Stop Hook may decide that a development node needs a
 local checkpoint, GitHub sync, tag, or other mark, but only within the GitHub
 policy recorded in PROJECT_SPEC. If the policy is missing or local-only, do not
 request remote push, remote tag, repository creation, or remote changes.
+Remote GitHub actions require a complete non-secret policy with auth method
+description, repository target, visibility, allowed automatic operations, and
+available credentials. If credentials are unavailable or a push/tag/release
+requires human confirmation, fail safe to `human_review` instead of pretending
+the sync succeeded.
 
 ## Start Work Rule
 When the user says `开始工作`:
@@ -65,10 +70,14 @@ When the user says `开始工作`:
 ## End Work Rule
 When all Acceptance Criteria are satisfied:
 
-1. Stop further development.
-2. Generate or update `.project_wiki/COMPLETION_REPORT.md`.
-3. Summarize changed files and validation results.
-4. Do not request another auto-continue.
+1. Stop ordinary development.
+2. Run the user-perspective experience evaluation before final completion.
+3. If the evaluation finds obvious high-value user-facing issues, convert them
+   into a controlled Spec Steward update before worker development continues.
+4. Generate or update `.project_wiki/COMPLETION_REPORT.md` only after the
+   evaluation finds no obvious issue or only low-value/out-of-scope suggestions.
+5. Summarize changed files, validation results, and experience evaluation status.
+6. Do not request another auto-continue.
 
 When the user says `结束工作`, summarize current state and do not continue automatically.
 
