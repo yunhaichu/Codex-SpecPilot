@@ -46,7 +46,7 @@ def project_root():
     directory so UserPromptSubmit can create the first .project_wiki files.
     """
     fallback = Path(__file__).resolve().parents[1]
-    env_dir = os.environ.get("CODEX_WIKIGUARD_PROJECT_DIR")
+    env_dir = os.environ.get("CODEX_SPECPILOT_PROJECT_DIR")
     if env_dir:
         return Path(env_dir).expanduser().resolve()
 

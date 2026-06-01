@@ -1,4 +1,4 @@
-# Codex-WikiGuard -- JUDGE
+# Codex-SpecPilot -- JUDGE
 
 ## Latest Judgment
 

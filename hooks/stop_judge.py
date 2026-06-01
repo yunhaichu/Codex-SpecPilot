@@ -12,7 +12,7 @@ from project_injector import bootstrap_wiki_files
 WIKI_DIR = wiki_dir()
 
 # Recursive guard: child codex exec processes must not judge or write state.
-if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+if os.environ.get("CODEX_SPECPILOT_CHILD") == "1":
     print(json.dumps({}, indent=2, ensure_ascii=False))
     sys.exit(0)
 

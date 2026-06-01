@@ -17,10 +17,10 @@ Codex Worker 可以开发业务代码，但不能修改监督它自己的任务�
 ## 2. Project Mode
 
 PROJECT_SPEC.md 必须声明项目模式：
-- `wikiguard_self_development` — 开发 Codex SpecPilot 自身
+- `specpilot_self_development` — 开发 Codex SpecPilot 自身
 - `supervised_project_development` — 被 SpecPilot 监督的普通项目
 
-### wikiguard_self_development
+### specpilot_self_development
 
 用于开发 Codex SpecPilot 本身。
 允许 Codex 修改：

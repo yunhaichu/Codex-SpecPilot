@@ -35,7 +35,7 @@ def _run_hook(script_name, child=False, input_text="{}"):
     env = os.environ.copy()
     env["PYTHONPATH"] = HOOKS_DIR
     if child:
-        env["CODEX_WIKIGUARD_CHILD"] = "1"
+        env["CODEX_SPECPILOT_CHILD"] = "1"
     return subprocess.run(
         [sys.executable, os.path.join(HOOKS_DIR, script_name)],
         capture_output=True,
@@ -126,7 +126,7 @@ def test_pre_tool_guard_light_boundary():
             win_decision = win_blocked.get("hookSpecificOutput", {}).get("permissionDecision")
             test("Windows-style judge-system path is blocked", win_decision == "deny", win_blocked)
 
-            self_dev_spec = "# Spec\nwikiguard_self_development\n"
+            self_dev_spec = "# Spec\nspecpilot_self_development\n"
             with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
                 f.write(self_dev_spec)
             hook_config_result = pre.pre_tool_use({
@@ -595,15 +595,15 @@ def test_codex_command_profile_inheritance():
     print("\n[codex exec command]")
     codex_client = _load_hook_module("codex_client")
     old_profile = os.environ.pop("CODEX_PROFILE", None)
-    old_wiki_profile = os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
+    old_wiki_profile = os.environ.pop("CODEX_SPECPILOT_PROFILE", None)
     try:
         test("default command has no profile",
              codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "prompt"])
         os.environ["CODEX_PROFILE"] = "base"
         test("CODEX_PROFILE is inherited",
              codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "--profile", "base", "prompt"])
-        os.environ["CODEX_WIKIGUARD_PROFILE"] = "wiki"
-        test("CODEX_WIKIGUARD_PROFILE wins",
+        os.environ["CODEX_SPECPILOT_PROFILE"] = "wiki"
+        test("CODEX_SPECPILOT_PROFILE wins",
              codex_client.build_codex_exec_command("prompt") == ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--disable", "hooks", "--disable", "plugins", "--disable", "apps", "--disable", "memories", "-c", 'model_reasoning_effort="none"', "--profile", "wiki", "prompt"])
     finally:
         if old_profile is not None:
@@ -611,9 +611,9 @@ def test_codex_command_profile_inheritance():
         else:
             os.environ.pop("CODEX_PROFILE", None)
         if old_wiki_profile is not None:
-            os.environ["CODEX_WIKIGUARD_PROFILE"] = old_wiki_profile
+            os.environ["CODEX_SPECPILOT_PROFILE"] = old_wiki_profile
         else:
-            os.environ.pop("CODEX_WIKIGUARD_PROFILE", None)
+            os.environ.pop("CODEX_SPECPILOT_PROFILE", None)
 
 
 def test_hooks_json_cross_platform_fields():
@@ -637,19 +637,19 @@ def test_hooks_json_cross_platform_fields():
 def test_project_path_resolution():
     print("\n[project path resolution]")
     project_paths = _load_hook_module("project_paths")
-    old_project_dir = os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+    old_project_dir = os.environ.pop("CODEX_SPECPILOT_PROJECT_DIR", None)
     old_cwd = os.getcwd()
     try:
         with tempfile.TemporaryDirectory() as td:
             wiki = os.path.realpath(os.path.join(td, ".project_wiki"))
             os.mkdir(wiki)
 
-            os.environ["CODEX_WIKIGUARD_PROJECT_DIR"] = td
+            os.environ["CODEX_SPECPILOT_PROJECT_DIR"] = td
             test("project dir env selects target wiki",
                  project_paths.wiki_dir() == wiki,
                  project_paths.wiki_dir())
 
-            os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+            os.environ.pop("CODEX_SPECPILOT_PROJECT_DIR", None)
             os.chdir(td)
             test("cwd selects target wiki",
                  project_paths.wiki_dir() == wiki,
@@ -664,9 +664,9 @@ def test_project_path_resolution():
     finally:
         os.chdir(old_cwd)
         if old_project_dir is not None:
-            os.environ["CODEX_WIKIGUARD_PROJECT_DIR"] = old_project_dir
+            os.environ["CODEX_SPECPILOT_PROJECT_DIR"] = old_project_dir
         else:
-            os.environ.pop("CODEX_WIKIGUARD_PROJECT_DIR", None)
+            os.environ.pop("CODEX_SPECPILOT_PROJECT_DIR", None)
 
 
 def test_project_injector_bootstrap_and_onboarding():

@@ -4,7 +4,7 @@ import os
 import sys
 
 # Recursive guard: skip if child Codex process
-if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+if os.environ.get("CODEX_SPECPILOT_CHILD") == "1":
     print(json.dumps({}, indent=2, ensure_ascii=False))
     sys.exit(0)
 

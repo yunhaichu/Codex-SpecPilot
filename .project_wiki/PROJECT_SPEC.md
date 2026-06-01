@@ -1,7 +1,7 @@
 # Project Specification
 
 ## 0. Project Mode
-当前项目模式：`wikiguard_self_development`
+当前项目模式：`specpilot_self_development`
 
 This is the Codex SpecPilot project itself. Codex may modify Hook source,
 tests, README, and selected wiki instruction files only when the user asks to
@@ -45,8 +45,8 @@ onboarding，避免 Codex Worker 在合同不完整时直接写业务代码。
 - Stop Hook 是核心控制器，负责决定 `continue | revise | done | human_review`。
 - `continue` 或 `revise` 时，Stop Hook 应通过 `decision:block` 给出下一步动作，驱动 Codex 继续。
 - Hook 调用 AI 时使用当前 Codex 默认模型：`codex exec`，不传 `-m`，不写死模型、profile 或 endpoint。
-- Profile 只允许通过 `CODEX_WIKIGUARD_PROFILE` 或 `CODEX_PROFILE` 继承。
-- 必须防递归：子进程使用 `CODEX_WIKIGUARD_CHILD=1`。
+- Profile 只允许通过 `CODEX_SPECPILOT_PROFILE` 或 `CODEX_PROFILE` 继承。
+- 必须防递归：子进程使用 `CODEX_SPECPILOT_CHILD=1`。
 - 必须支持 macOS 和 Windows。
 - 判断体系文件不能由 Codex Worker 修改，只能由对应 Hook 在职责范围内写入。
 - 不要把项目扩展成复杂安全平台；保持 Hook 轻量。

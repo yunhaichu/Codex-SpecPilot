@@ -23,7 +23,7 @@ GUARD_LOG = os.path.join(WIKI_DIR, "guard_log.jsonl")
 PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
 
 # Recursive guard: skip if child Codex process
-if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+if os.environ.get("CODEX_SPECPILOT_CHILD") == "1":
     print(json.dumps({}, indent=2, ensure_ascii=False))
     sys.exit(0)
 
@@ -113,7 +113,7 @@ def _extract_targets(turn_payload):
 
 def _is_self_dev_allowed_supervision_target(path, project_spec):
     """Allow explicit SpecPilot self-development files in self-dev mode."""
-    if load_project_mode(project_spec) != "wikiguard_self_development":
+    if load_project_mode(project_spec) != "specpilot_self_development":
         return False
     normalized = os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
     basename = normalized.rstrip("/").rsplit("/", 1)[-1]

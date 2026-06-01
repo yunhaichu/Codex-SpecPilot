@@ -18,7 +18,7 @@
 
 ## hooks config sequence format fix (2026-05-31)
 - Fixed Codex hooks config parse error by switching to sequence format (no "group" wrapper).
-- Commented out non-WikiGuard hooks in ~/.codex/hooks.json.
+- Commented out non-SpecPilot hooks in ~/.codex/hooks.json.
 - PreToolUse now uses per-tool matcher groups (Bash, apply_patch, Edit, Write).
 - Updated smoke_test.py test_hooks_json_pretooluse_coverage() to handle both old and new formats.
 - smoke_test.py: **120/120 pass**
@@ -116,16 +116,16 @@ Findings:
   - 86fed04: yes
   - 6163756: yes
 - codex_client hardcoded profile: no
-- codex_client --profile source: CODEX_WIKIGUARD_PROFILE or CODEX_PROFILE only
+- codex_client --profile source: CODEX_SPECPILOT_PROFILE or CODEX_PROFILE only
 - hooks.json sequence format: yes
 - legacy profile remains in ~/.codex/config.toml: no
 - legacy [profiles]/[model_providers] sections in ~/.codex/config.toml: yes ([profiles.ollama-launch], [model_providers.ollama-launch])
 - profile config file exists: yes (~/.codex/ollama-launch-codex-app.config.toml)
 - CODEX_PROFILE: not set
-- CODEX_WIKIGUARD_PROFILE: not set
+- CODEX_SPECPILOT_PROFILE: not set
 - diagnose_codex_exec.py: pass (ok True, profile None, command_mode default)
 - direct codex exec: pass (default profile, no legacy profile error)
-- direct codex exec with CODEX_WIKIGUARD_CHILD=1: pass
+- direct codex exec with CODEX_SPECPILOT_CHILD=1: pass
 - hook subprocess codex exec: pass ({'ok': True, 'profile': None, 'command_mode': 'default'})
 Conclusion:
 - Current repository profile inheritance fix does not conflict with the current environment.
@@ -136,13 +136,13 @@ Conclusion:
 - Result: partial real-world verification.
 - Evidence: `codex exec --enable hooks ... -C examples/minimal_supervised_project '开始工作'` completed the minimal calculator task from one user prompt, updated code/tests/README/completion report, and `python run_tests.py` passed with 2 tests.
 - Hook findings: user-level hook state was disabled at first; after temporarily enabling hooks and increasing hook timeout, the run completed. User-level config was restored after the trial.
-- Path finding: hooks must resolve the target project's `.project_wiki`, not the WikiGuard repo's own `.project_wiki`; this run required `CODEX_WIKIGUARD_PROJECT_DIR` / cwd-aware path resolution.
+- Path finding: hooks must resolve the target project's `.project_wiki`, not the SpecPilot repo's own `.project_wiki`; this run required `CODEX_SPECPILOT_PROJECT_DIR` / cwd-aware path resolution.
 - Limit: no `JUDGE.md`, `judge_latest.json`, `latest_context.md`, or `loop_state.json` was produced in the example project, so Stop Hook `decision:block` auto-continue is still not real-world verified.
 - Cleanup: example fixture was restored to its unfinished baseline so it remains reusable for future trials.
 
 ## TASK-005 clean unattended e2e trial (2026-05-31)
 - Result: blocked.
-- Trial directory: `/tmp/wikiguard-task005-clean-e2e`.
+- Trial directory: `/tmp/specpilot-task005-clean-e2e`.
 - Minimal fixes applied in repo:
   - `codex_client.py` now runs child `codex exec` with hooks disabled, JSON streaming, ephemeral mode, nonessential child features disabled, and no hardcoded model/profile/endpoint.
   - `stop_judge.py` uses a compact AI judging prompt to keep Stop lightweight.
@@ -155,7 +155,7 @@ Conclusion:
   - Running `hooks.stop_judge` directly on the same incomplete result returned `decision:block` with next action for TASK-002.
   - Direct Stop AI judging sometimes takes about 9-12 seconds; the current trusted user-level Stop hook appears constrained by a shorter outer timeout.
 - Environment/loading findings:
-  - The user-level hook command `python -m hooks...` does not find WikiGuard hooks in an arbitrary target project unless the environment exposes the WikiGuard repo on `PYTHONPATH` or an equivalent launcher/symlink is present.
+  - The user-level hook command `python -m hooks...` does not find SpecPilot hooks in an arbitrary target project unless the environment exposes the SpecPilot repo on `PYTHONPATH` or an equivalent launcher/symlink is present.
   - Changing `~/.codex/hooks.json` timeout invalidated hook loading under the current trust state, so the long-timeout config could not be verified non-interactively.
 - Secondary finding not fixed in this pass:
   - PreToolUse failed to parse Codex `apply_patch` target paths in the real CLI payload and blocked apply_patch; Codex worked around it with a narrow Perl edit. This was not fixed because TASK-005 only allowed minimal loading/trust/timeout/environment fixes.
@@ -164,7 +164,7 @@ Conclusion:
 
 ## TASK-005 clean unattended e2e retry after Stop timeout/trust fix (2026-05-31)
 - Result: pass.
-- Clean trial directory: `/tmp/wikiguard-task005-clean-e2e-fixed-Cv2GpR`.
+- Clean trial directory: `/tmp/specpilot-task005-clean-e2e-fixed-Cv2GpR`.
 - Runtime failure source diagnosed:
   - The failed real CLI run completed TASK-001, then showed `hook: Stop Failed`.
   - The rollout timestamps showed about 10 seconds between the final assistant message and task completion.

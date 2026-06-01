@@ -24,7 +24,7 @@ def main():
 
     # 3. Environment variables
     print("3. Environment variables:")
-    for key in ["CODEX_PROFILE", "CODEX_WIKIGUARD_PROFILE", "CODEX_WIKIGUARD_CHILD"]:
+    for key in ["CODEX_PROFILE", "CODEX_SPECPILOT_PROFILE", "CODEX_SPECPILOT_CHILD"]:
         val = os.environ.get(key)
         print(f"   {key} = {val if val else '(not set)'}")
 
@@ -47,7 +47,7 @@ def main():
             if "not supported when using Codex with a ChatGPT account" in err:
                 print("\n   DIAGNOSIS: ChatGPT account mode does not support this custom model. Use an API-key/local-compatible Codex profile or launch Codex with a compatible profile exposed via CODEX_PROFILE.")
             elif "legacy profile config is no longer supported" in err:
-                print("\n   DIAGNOSIS: Legacy profile config detected. Use <profile>.config.toml and pass profile through CODEX_PROFILE or CODEX_WIKIGUARD_PROFILE.")
+                print("\n   DIAGNOSIS: Legacy profile config detected. Use <profile>.config.toml and pass profile through CODEX_PROFILE or CODEX_SPECPILOT_PROFILE.")
     except Exception as e:
         print(f"   Error during test: {e}")
 

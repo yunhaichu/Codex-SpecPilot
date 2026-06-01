@@ -2,7 +2,7 @@
 
 ## 0. Project Mode
 必须选择一个：
-- `wikiguard_self_development`
+- `specpilot_self_development`
 - `supervised_project_development`
 当前项目模式：
 

@@ -108,7 +108,7 @@ Use AI judgment for:
 
 Keep deterministic logic minimal:
 
-- recursive guard with `CODEX_WIKIGUARD_CHILD=1`;
+- recursive guard with `CODEX_SPECPILOT_CHILD=1`;
 - timeout handling;
 - JSON parsing;
 - loop count;
@@ -127,7 +127,7 @@ Do not hardcode a model, profile, endpoint, API key, GPT, or Qwen.
 
 Profile inheritance only:
 
-1. `CODEX_WIKIGUARD_PROFILE`
+1. `CODEX_SPECPILOT_PROFILE`
 2. `CODEX_PROFILE`
 3. default Codex environment
 

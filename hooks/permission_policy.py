@@ -89,14 +89,18 @@ _DANGEROUS_AUTO_ACTIONS = [
 ]
 
 
+SELF_DEV_MODE = "specpilot_self_development"
+SUPERVISED_MODE = "supervised_project_development"
+
+
 def load_project_mode(project_spec_text):
-    """Return wikiguard_self_development / supervised_project_development / unknown."""
+    """Return specpilot_self_development / supervised_project_development / unknown."""
     if not project_spec_text:
         return "unknown"
-    if "wikiguard_self_development" in project_spec_text:
-        return "wikiguard_self_development"
-    if "supervised_project_development" in project_spec_text:
-        return "supervised_project_development"
+    if SELF_DEV_MODE in project_spec_text:
+        return SELF_DEV_MODE
+    if SUPERVISED_MODE in project_spec_text:
+        return SUPERVISED_MODE
     return "unknown"
 
 
@@ -152,7 +156,7 @@ def _get_project_spec_path():
 
 
 def _is_allowed_in_self_dev(normalized, basename):
-    """Check if path is allowed in wikiguard_self_development mode."""
+    """Check if path is allowed in specpilot_self_development mode."""
      # hooks/*.py, .codex/hooks.json, tests/*, README.md, INJECTION.md are allowed
     if normalized.startswith("hooks/") and normalized.endswith(".py"):
         return True
@@ -181,9 +185,9 @@ def is_allowed_for_codex_worker(path, project_spec_text=None):
      # Check supervision files first
     if is_supervision_file(path):
          # But allow self-dev exceptions
-        if load_project_mode(project_spec_text) == "wikiguard_self_development":
+        if load_project_mode(project_spec_text) == SELF_DEV_MODE:
             if _is_allowed_in_self_dev(normalized, basename):
-                return (True, "allowed in wikiguard_self_development mode")
+                return (True, "allowed in specpilot_self_development mode")
         return (False, "Codex Worker cannot modify supervision file: %s" % path)
 
      # Check always protected paths
@@ -205,9 +209,9 @@ def is_allowed_for_codex_worker(path, project_spec_text=None):
                 return (True, "path found in PROJECT_SPEC.md Allowed Scope")
 
      # Check self-dev mode exceptions
-    if load_project_mode(project_spec_text) == "wikiguard_self_development":
+    if load_project_mode(project_spec_text) == SELF_DEV_MODE:
         if _is_allowed_in_self_dev(normalized, basename):
-            return (True, "allowed in wikiguard_self_development mode")
+            return (True, "allowed in specpilot_self_development mode")
 
      # Default: deny (conservative)
     return (False, "file not in Allowed Scope and not explicitly permitted")
@@ -320,7 +324,7 @@ def get_permission_summary():
          "- .project_wiki/PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, PERMISSIONS.md\n"
          "- .project_wiki/JUDGE.md, latest_context.md, judge_latest.json,\n"
          "  loop_state.json, guard_log.jsonl, WORKFLOW.md, COMPLETION_REPORT_TEMPLATE.md\n"
-         "- .codex/hooks.json, hooks/*.py (unless wikiguard_self_development)\n"
+         "- .codex/hooks.json, hooks/*.py (unless specpilot_self_development)\n"
          "- .env, secrets, keys, deploy/, schema/, migration/, migrations/\n"
          "Only modify files within Allowed Scope in PROJECT_SPEC.md."
      )

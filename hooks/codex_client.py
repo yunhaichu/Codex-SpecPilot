@@ -18,17 +18,25 @@ LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
 MAX_LOOP_COUNT = 3
 
 
+def _profile_from_env():
+    return os.environ.get("CODEX_SPECPILOT_PROFILE") or os.environ.get("CODEX_PROFILE")
+
+
+def _child_env_enabled():
+    return os.environ.get("CODEX_SPECPILOT_CHILD") == "1"
+
+
 def build_codex_exec_command(prompt):
     """Build the codex exec command, inheriting profile from environment variables.
 
     Priority:
-    1. CODEX_WIKIGUARD_PROFILE (highest)
+    1. CODEX_SPECPILOT_PROFILE (highest)
     2. CODEX_PROFILE
     3. None (default)
 
     Never hardcodes a profile name in this file.
     """
-    profile = os.environ.get("CODEX_WIKIGUARD_PROFILE") or os.environ.get("CODEX_PROFILE")
+    profile = _profile_from_env()
     base = [
         "codex", "exec", "--json", "--ephemeral",
         "--skip-git-repo-check", "--disable", "hooks",
@@ -47,7 +55,7 @@ def call_codex_default(prompt, timeout=120):
         {"ok": True, "content": "...", "error": None, "profile": "<name>", "command_mode": "default | profile"}  on success
         {"ok": False, "content": "", "error": "...", "profile": "<name>", "command_mode": "default | profile"}    on failure
     """
-    if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
+    if _child_env_enabled():
         return {
             "ok": False,
             "content": "",
@@ -57,13 +65,13 @@ def call_codex_default(prompt, timeout=120):
         }
 
     cmd = build_codex_exec_command(prompt)
-    profile = os.environ.get("CODEX_WIKIGUARD_PROFILE") or os.environ.get("CODEX_PROFILE")
+    profile = _profile_from_env()
     command_mode = "profile" if profile else "default"
 
     try:
         env = {
             **os.environ,
-            "CODEX_WIKIGUARD_CHILD": "1",
+            "CODEX_SPECPILOT_CHILD": "1",
             "PYTHONUNBUFFERED": "1",
         }
         proc = subprocess.Popen(
