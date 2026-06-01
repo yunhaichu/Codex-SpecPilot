@@ -30,33 +30,46 @@ Plan:
 2. Do not edit `.project_wiki/PROJECT_SPEC.md` as Codex Worker.
 3. Summarize the requested contract change.
 4. List the affected PROJECT_SPEC sections.
-5. State the next required action as a controlled Spec Steward update before development continues.
+5. Make the change request clear enough for the controlled Spec Steward flow.
+6. Do not ask the user to manually edit `PROJECT_SPEC.md` or task-book files.
 
 The Stop Hook should treat this as `spec_update_required`, not as normal
-`continue`. After the task contract is updated by the controlled spec-update
-flow, Codex Worker resumes from the new Development Plan.
+`continue`. If information is sufficient, the controlled Spec Steward /
+onboarding / spec update flow should write the updated task contract directly.
+If information is insufficient, it asks only the minimum clarifying questions.
+After the task contract is updated by the controlled spec-update flow, Codex
+Worker resumes from the new Development Plan.
 
 The controlled writer is the Spec Steward flow. It may update
 `.project_wiki/PROJECT_SPEC.md` only for a user-confirmed contract change.
+When latest context is already `spec_update_required` and the user replies
+`同意`, `yes`, `ok`, `apply`, or an equivalent confirmation, treat that as
+permission for Spec Steward to apply the previously summarized change.
+If the user rejects the summarized change or uses ambiguous confirmation
+wording, do not apply the task contract update; ask only the minimum
+confirmation or replacement-change question.
 
 ## GitHub Sync Rule
 SpecPilot defaults to local-only development unless PROJECT_SPEC explicitly
 enables GitHub sync.
 
 During onboarding, ask whether the user wants GitHub upload/sync. If not,
-record local-only. If yes, ask for auth method, repository owner/name, public
-or private visibility, and allowed push/tag/checkpoint behavior. Do not ask the
-user to paste API keys, tokens, or secrets into the project.
+record local-only. If yes, ask for GitHub account, auth method, credential
+availability, repository owner/name, public or private visibility, whether a
+new repository may be created or an existing repository must be used, marker
+nodes, and allowed automatic operations versus human confirmation. Do not ask
+the user to paste API keys, tokens, or secrets into the project.
 
 During development, the Stop Hook may decide that a development node needs a
 local checkpoint, GitHub sync, tag, or other mark, but only within the GitHub
 policy recorded in PROJECT_SPEC. If the policy is missing or local-only, do not
 request remote push, remote tag, repository creation, or remote changes.
 Remote GitHub actions require a complete non-secret policy with auth method
-description, repository target, visibility, allowed automatic operations, and
-available credentials. If credentials are unavailable or a push/tag/release
-requires human confirmation, fail safe to `human_review` instead of pretending
-the sync succeeded.
+description, GitHub account, repository target, existing-vs-new repository
+policy, visibility, marker nodes, allowed automatic operations, and available
+credentials. If credentials are unavailable or a push/tag/release/repository
+creation requires human confirmation, fail safe to `human_review` instead of
+pretending the sync succeeded.
 
 ## Start Work Rule
 When the user says `开始工作`:

@@ -30,14 +30,21 @@ Plan:
 2. Do not edit `.project_wiki/PROJECT_SPEC.md` as Codex Worker.
 3. Summarize the requested contract change.
 4. List the affected PROJECT_SPEC sections.
-5. State the next required action as a controlled Spec Steward update before development continues.
+5. Make the change request clear enough for the controlled Spec Steward flow.
+6. Do not ask the user to manually edit `PROJECT_SPEC.md` or task-book files.
 
 The Stop Hook should treat this as `spec_update_required`, not as normal
-`continue`. After the task contract is updated by the controlled spec-update
-flow, Codex Worker resumes from the new Development Plan.
+`continue`. If information is sufficient, the controlled Spec Steward /
+onboarding / spec update flow should write the updated task contract directly.
+If information is insufficient, it asks only the minimum clarifying questions.
+After the task contract is updated by the controlled spec-update flow, Codex
+Worker resumes from the new Development Plan.
 
 The controlled writer is the Spec Steward flow. It may update
 `.project_wiki/PROJECT_SPEC.md` only for a user-confirmed contract change.
+When latest context is already `spec_update_required` and the user replies
+`同意`, `yes`, `ok`, `apply`, or an equivalent confirmation, treat that as
+permission for Spec Steward to apply the previously summarized change.
 
 ## GitHub Sync Rule
 SpecPilot defaults to local-only development unless PROJECT_SPEC explicitly

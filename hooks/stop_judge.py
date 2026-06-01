@@ -9,6 +9,7 @@ from codex_client import call_codex_default
 from project_paths import wiki_dir
 from project_injector import ensure_runtime_files
 from secret_scan import find_secret_material
+import spec_steward
 
 WIKI_DIR = wiki_dir()
 
@@ -58,8 +59,22 @@ REMOTE_GITHUB_ACTION_PATTERNS = {
     "push": ("push", "git push"),
     "tag": ("tag", "git tag"),
     "release": ("release",),
-    "repo": ("create repo", "create repository", "gh repo", "repository creation"),
+    "repo": (
+        "create repo",
+        "create repository",
+        "gh repo",
+        "repository creation",
+        "new repository",
+        "创建仓库",
+    ),
     "pr": ("pull request", "open pr", "create pr", "gh pr"),
+    "checkpoint": (
+        "github checkpoint",
+        "remote checkpoint",
+        "checkpoint to github",
+        "github marker",
+        "remote marker",
+    ),
 }
 REQUIRED_SPEC_TERMS = (
     "Project Mode",
@@ -141,6 +156,12 @@ def _write_file(path, content):
 
 def _ensure_project_wiki_files():
     ensure_runtime_files(os.path.dirname(WIKI_DIR), force=False)
+
+
+def _sync_spec_steward_paths():
+    spec_steward.WIKI_DIR = WIKI_DIR
+    spec_steward.PROJECT_SPEC_PATH = _wiki_path("PROJECT_SPEC.md")
+    spec_steward.LATEST_CONTEXT_PATH = _wiki_path("latest_context.md")
 
 
 def _project_spec_needs_onboarding(project_spec):
@@ -261,10 +282,16 @@ def _write_md(verdict, reason, assistant_msg, history, next_action_text, questio
 
 
 def _write_context_md(verdict, reason, next_action_text="", auto_continue=False, questions=None):
+    if next_action_text:
+        next_action_display = next_action_text
+    elif verdict == "done":
+        next_action_display = "None (task complete)"
+    else:
+        next_action_display = NEXT_ACTION
     md = "# Latest Judge Context\n\n"
     md += "VERDICT: %s\n" % verdict
     md += "AUTO_CONTINUE: %s\n" % ("enabled" if auto_continue else "disabled")
-    md += "NEXT_ACTION: %s\n" % (next_action_text if next_action_text else NEXT_ACTION)
+    md += "NEXT_ACTION: %s\n" % next_action_display
     md += "REASON: %s\n" % reason
     if questions:
         md += "QUESTIONS:\n"
@@ -418,26 +445,72 @@ def _is_local_only_policy(policy_text):
 
 def _policy_has_required_sync_fields(policy_text):
     lower = policy_text.lower()
+    has_account = (
+        "github account" in lower
+        or "account:" in lower
+        or "账号" in policy_text
+        or "账户" in policy_text
+    )
     has_auth = (
         "auth method" in lower
         or "credential" in lower
         or "gh cli" in lower
         or "认证方式" in policy_text
     )
+    has_credentials = (
+        "credentials:" in lower
+        or "credential status" in lower
+        or "凭据" in policy_text
+        or "认证状态" in policy_text
+    )
     has_repo = "repository" in lower or "repo" in lower or "仓库" in policy_text
+    has_repo_creation = (
+        "existing repository" in lower
+        or "new repository" in lower
+        or "create repository" in lower
+        or "repository creation" in lower
+        or "allow creating" in lower
+        or "must use existing" in lower
+        or "已有仓库" in policy_text
+        or "既有仓库" in policy_text
+        or "新建仓库" in policy_text
+        or "允许创建" in policy_text
+        or "必须使用已有" in policy_text
+    )
     has_visibility = (
         "public" in lower
         or "private" in lower
         or "公开" in policy_text
         or "私有" in policy_text
     )
+    has_marker_nodes = (
+        "marker" in lower
+        or "checkpoint" in lower
+        or "commit" in lower
+        or "push" in lower
+        or "tag" in lower
+        or "release" in lower
+        or "节点" in policy_text
+        or "检查点" in policy_text
+    )
     has_allowed_ops = (
         "allowed automatic operations" in lower
         or "automatic operations" in lower
         or "auto operations" in lower
+        or "human confirmation" in lower
         or "允许自动" in policy_text
+        or "人工确认" in policy_text
     )
-    return has_auth and has_repo and has_visibility and has_allowed_ops
+    return all((
+        has_account,
+        has_auth,
+        has_credentials,
+        has_repo,
+        has_repo_creation,
+        has_visibility,
+        has_marker_nodes,
+        has_allowed_ops,
+    ))
 
 
 def _operation_requires_human_confirmation(policy_text, action):
@@ -577,6 +650,116 @@ def _system_message(verdict, reason, next_action, questions=None):
     return "Codex SpecPilot wrote %s judgment." % verdict
 
 
+def _build_spec_update_change_request(reason, next_action, assistant_msg, latest_ctx):
+    return (
+        "Stop Judge determined that the user requested or confirmed a task-contract "
+        "update. Apply the controlled Spec Steward flow now. If the request is "
+        "sufficient, write the complete updated PROJECT_SPEC.md and update the "
+        "Development Plan. If the request is insufficient, ask only the minimum "
+        "clarifying questions. Do not ask the user to manually edit task-book files.\n\n"
+        "STOP_REASON:\n%s\n\n"
+        "STOP_NEXT_ACTION:\n%s\n\n"
+        "LATEST_CONTEXT:\n%s\n\n"
+        "LAST_ASSISTANT_MESSAGE:\n%s"
+        % (
+            (reason or "").strip(),
+            (next_action or "").strip(),
+            (latest_ctx or "").strip()[:4000],
+            (assistant_msg or "").strip()[:6000],
+        )
+    )
+
+
+def _handle_spec_update_required_stop(assistant_msg, history, latest_ctx, reason,
+                                      next_action, questions, llm_ok, llm_error,
+                                      progress_made):
+    if questions:
+        verdict = "spec_update_required"
+        _write_loop_state(0, False, verdict)
+        _write_json(verdict, reason, False, next_action, loop_count=0,
+                    llm_ok=llm_ok, llm_error=llm_error,
+                    progress_made=progress_made, questions=questions)
+        _write_md(verdict, reason, assistant_msg, history, next_action,
+                  questions=questions)
+        _write_context_md(verdict, reason, next_action, auto_continue=False,
+                          questions=questions)
+        return {
+            "systemMessage": _system_message(verdict, reason, next_action,
+                                             questions=questions),
+        }
+
+    _sync_spec_steward_paths()
+    change_request = _build_spec_update_change_request(
+        reason, next_action, assistant_msg, latest_ctx
+    )
+    steward_result = spec_steward.propose_spec_update(change_request, apply_update=True)
+
+    steward_questions = _normalize_questions(steward_result.get("questions", []))
+    if steward_result.get("ok") and steward_result.get("applied"):
+        verdict = "pass"
+        summary = steward_result.get("update_summary") or steward_result.get("reason") or "PROJECT_SPEC updated."
+        steward_reason = "Spec Steward applied PROJECT_SPEC update: %s" % summary
+        steward_next_action = (
+            "PROJECT_SPEC.md was updated by the controlled Spec Steward flow. "
+            "Resume from the updated Development Plan; ordinary Worker must not "
+            "manually edit the task contract."
+        )
+        _write_loop_state(0, False, verdict)
+        _write_json(verdict, steward_reason, False, steward_next_action,
+                    loop_count=0, llm_ok=llm_ok, llm_error=llm_error,
+                    progress_made=True)
+        _write_md(verdict, steward_reason, assistant_msg, history,
+                  steward_next_action)
+        _write_context_md(verdict, steward_reason, steward_next_action,
+                          auto_continue=False)
+        return {
+            "systemMessage": (
+                "Codex SpecPilot updated `.project_wiki/PROJECT_SPEC.md` through "
+                "the controlled Spec Steward flow.\nNext action: %s"
+                % steward_next_action
+            )
+        }
+
+    if steward_result.get("ok") and steward_result.get("decision") == "needs_user_confirmation":
+        verdict = "spec_update_required"
+        steward_reason = "Spec Steward needs more information: %s" % (
+            steward_result.get("reason", "missing confirmed contract details")
+        )
+        steward_next_action = "Ask the user the minimum clarifying questions before updating PROJECT_SPEC."
+        _write_loop_state(0, False, verdict)
+        _write_json(verdict, steward_reason, False, steward_next_action,
+                    loop_count=0, llm_ok=llm_ok, llm_error=llm_error,
+                    progress_made=False, questions=steward_questions)
+        _write_md(verdict, steward_reason, assistant_msg, history,
+                  steward_next_action, questions=steward_questions)
+        _write_context_md(verdict, steward_reason, steward_next_action,
+                          auto_continue=False, questions=steward_questions)
+        return {
+            "systemMessage": _system_message(verdict, steward_reason,
+                                             steward_next_action,
+                                             questions=steward_questions),
+        }
+
+    verdict = "human_review"
+    steward_reason = "Spec Steward could not apply the contract update: %s" % (
+        steward_result.get("reason") or steward_result.get("error") or "unknown error"
+    )
+    steward_next_action = "Review the task-contract update request and rerun the controlled Spec Steward flow."
+    _write_loop_state(0, False, verdict)
+    _write_json(verdict, steward_reason, False, steward_next_action,
+                loop_count=0, llm_ok=llm_ok, llm_error=llm_error,
+                progress_made=False, questions=steward_questions)
+    _write_md(verdict, steward_reason, assistant_msg, history,
+              steward_next_action, questions=steward_questions)
+    _write_context_md(verdict, steward_reason, steward_next_action,
+                      auto_continue=False, questions=steward_questions)
+    return {
+        "systemMessage": _system_message(verdict, steward_reason,
+                                         steward_next_action,
+                                         questions=steward_questions),
+    }
+
+
 def _build_onboarding_prompt(project_spec, onboarding_doc, latest_ctx, assistant_msg):
     return (
         "You are Codex SpecPilot Onboarding Steward. Return ONLY JSON.\n"
@@ -596,8 +779,10 @@ def _build_onboarding_prompt(project_spec, onboarding_doc, latest_ctx, assistant
         "high-signal questions.\n"
         "- GitHub sync policy is required during onboarding. If the user does not "
         "need upload/sync, encode local-only. If GitHub sync is requested, ask for "
-        "auth method without token/key text, repo owner/name, public/private "
-        "visibility, and allowed push/tag/checkpoint behavior.\n"
+        "GitHub account, auth method without token/key text, credential "
+        "availability, repo owner/name, whether repository creation is allowed or "
+        "an existing repo must be used, public/private visibility, marker nodes, "
+        "and allowed automatic operations versus human confirmation.\n"
         "- Do not request, write, or expose API keys, tokens, or secrets.\n"
         "- If enough information is confirmed, return write_spec with a complete "
         "PROJECT_SPEC containing sections 0 through 10 and TASK-* checklist items.\n"
@@ -663,7 +848,7 @@ def _handle_onboarding_stop(assistant_msg, history, project_spec, latest_ctx):
                     "Codex 允许修改哪些具体文件或目录？",
                     "哪些文件或目录必须保护？",
                     "每个阶段完成后用什么方式验证？",
-                    "是否需要 GitHub 同步？不需要则默认 local-only；需要则说明认证方式、公开/私有、仓库目标和允许的 push/tag/checkpoint 行为，不要提供 token 或密钥原文。",
+                    "是否需要 GitHub 同步？不需要则默认 local-only；需要则说明 GitHub 账号、认证方式、凭据可用状态、公开/私有、使用已有仓库还是允许新建仓库、marker 节点，以及哪些 push/tag/release 等操作允许自动执行或必须人工确认；不要提供 token 或密钥原文。",
                 ]
         else:
             _write_file(_wiki_path("PROJECT_SPEC.md"), updated_spec.rstrip() + "\n")
@@ -949,8 +1134,13 @@ def stop_judge(turn_payload):
         "If the user changed project goals, scope, priorities, acceptance criteria, "
         "or asks to rewrite the task contract, verdict must be spec_update_required; "
         "set auto_continue false and next_action to the required PROJECT_SPEC / "
-        "Development Plan update. For spec_update_required, include up to 5 concise "
-        "questions the user must answer before Spec Steward can update the task contract. "
+        "Development Plan update. If latest context is already spec_update_required "
+        "and the user confirms with 同意/yes/ok/apply or equivalent, keep verdict "
+        "spec_update_required and summarize the confirmed update in next_action. "
+        "For spec_update_required, include questions only when information is "
+        "insufficient; otherwise leave questions empty so the controlled Spec "
+        "Steward flow can apply the update directly. Never ask the user to manually "
+        "edit PROJECT_SPEC.md or task-book files. "
         "Set progress_made true when the last turn completed a task, passed validation, "
         "or advanced the project plan; set it false only when the loop is repeating "
         "without useful progress. "
@@ -1007,14 +1197,18 @@ def stop_judge(turn_payload):
         progress_made = False
         questions = []
 
-    # Permission gate on auto-continue
+    # Permission gate on auto-continue. For continue/revise, an explicit
+    # next_action is enough to drive the next loop; unsafe or unclear work
+    # should be represented by human_review instead of a non-continuing
+    # continue/revise verdict.
     can_continue = False
     auto_continue = False
-    if verdict in ("continue", "revise") and llm_auto_continue:
+    if verdict in ("continue", "revise"):
         if _is_permission_block(verdict, next_action, project_spec):
+            blocked_verdict = verdict
             can_continue = False
             verdict = "human_review"
-            reason = "permission policy blocked auto-continue: %s" % next_action
+            reason = "auto-continue requires explicit next_action for %s verdict" % blocked_verdict
         else:
             github_block_reason = _github_policy_block_reason(project_spec, next_action)
             if github_block_reason:
@@ -1037,7 +1231,7 @@ def stop_judge(turn_payload):
         next_loop_count = 0 if progress_made else loop_count + 1
         _write_loop_state(next_loop_count, True, verdict)
         auto_continue = True
-        reason_max = next_action[:1200] if next_action else "safe continue loop"
+        reason_max = ("NEXT_ACTION: " + next_action)[:1200]
         _write_json(verdict, reason, auto_continue, next_action,
                     loop_count=next_loop_count, llm_ok=llm_ok, llm_error=llm_error,
                     progress_made=progress_made, questions=questions)
@@ -1055,6 +1249,19 @@ def stop_judge(turn_payload):
             project_spec,
             latest_ctx,
             reason,
+        )
+
+    if verdict == "spec_update_required":
+        return _handle_spec_update_required_stop(
+            assistant_msg,
+            history,
+            latest_ctx,
+            reason,
+            next_action,
+            questions,
+            llm_ok,
+            llm_error,
+            progress_made,
         )
 
     if verdict in ("done", "pass", "human_review", "spec_update_required"):

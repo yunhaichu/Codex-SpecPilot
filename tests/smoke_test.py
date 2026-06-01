@@ -90,6 +90,33 @@ def test_user_prompt_submit():
     child = _run_hook("user_prompt_submit.py", child=True)
     test("child user prompt hook is no-op", json.loads(child.stdout) == {})
 
+    user_prompt = _load_hook_module("user_prompt_submit")
+    old_wiki = user_prompt.WIKI_DIR
+    with tempfile.TemporaryDirectory() as td:
+        wiki = os.path.join(td, ".project_wiki")
+        os.makedirs(wiki)
+        user_prompt.WIKI_DIR = wiki
+        try:
+            with open(os.path.join(wiki, "PROJECT_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(_complete_project_spec())
+            with open(os.path.join(wiki, "INJECTION.md"), "w", encoding="utf-8") as f:
+                f.write("# Codex SpecPilot\n\n" + ("long base context\n" * 500))
+            with open(os.path.join(wiki, "latest_context.md"), "w", encoding="utf-8") as f:
+                f.write(
+                    "VERDICT: spec_update_required\n"
+                    "NEXT_ACTION: Add TASK-099 for export.\n"
+                    "REASON: User requested a contract update.\n"
+                )
+            injected = user_prompt.user_prompt_submit({"prompt": "同意"})
+            latest_ctx = injected.get("hookSpecificOutput", {}).get("additionalContext", "")
+            test("latest spec-update context survives truncation for confirmation",
+                 "VERDICT: spec_update_required" in latest_ctx
+                 and "Add TASK-099" in latest_ctx
+                 and len(latest_ctx) <= user_prompt.MAX_CONTEXT_CHARS,
+                 latest_ctx[:1000])
+        finally:
+            user_prompt.WIKI_DIR = old_wiki
+
 
 def test_pre_tool_guard_light_boundary():
     print("\n[PreToolUse]")
@@ -204,6 +231,24 @@ def test_pre_tool_guard_light_boundary():
             )
             test("protected apply_patch command payload is blocked",
                  protected_decision == "deny", protected_patch)
+
+            absolute_hook_patch = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: %s\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ) % os.path.join(ROOT_DIR, "hooks", "stop_judge.py"),
+                },
+            })
+            absolute_hook_decision = absolute_hook_patch.get("hookSpecificOutput", {}).get(
+                "permissionDecision"
+            )
+            test("absolute hooks/*.py path is blocked outside self-dev",
+                 absolute_hook_decision == "deny", absolute_hook_patch)
     finally:
         pre.call_codex_default = old_call
         pre.WIKI_DIR = old_wiki
@@ -237,13 +282,73 @@ def test_stop_auto_continue_and_done_helpers():
                     "verdict": "continue",
                     "reason": "more implementation is needed",
                     "next_action": "Implement TASK-001 and run validation.",
-                    "auto_continue": True,
+                    "auto_continue": False,
                 }),
             }
             cont = stop.stop_judge({"last_assistant_message": "Implemented part of TASK-001."})
             test("continue returns decision:block", cont.get("decision") == "block", cont)
+            test("decision:block carries explicit next_action",
+                 cont.get("reason") == "NEXT_ACTION: Implement TASK-001 and run validation.",
+                 cont)
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            loop = json.load(open(os.path.join(td, "loop_state.json"), encoding="utf-8"))
+            test("continue records next_action and auto_continue",
+                 data.get("next_action") == "Implement TASK-001 and run validation."
+                 and data.get("auto_continue") is True
+                 and data.get("loop_count") == 1,
+                 data)
+            test("continue increments loop_state",
+                 loop.get("loop_count") == 1 and loop.get("auto_continue") is True,
+                 loop)
             ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
-            test("latest_context records enabled auto-continue", "AUTO_CONTINUE: enabled" in ctx)
+            test("latest_context records enabled auto-continue",
+                 "AUTO_CONTINUE: enabled" in ctx
+                 and "NEXT_ACTION: Implement TASK-001 and run validation." in ctx,
+                 ctx)
+
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "revise",
+                    "reason": "validation needs a correction",
+                    "next_action": "Revise TASK-001 validation and rerun tests.",
+                    "auto_continue": False,
+                }),
+            }
+            rev = stop.stop_judge({"last_assistant_message": "Validation exposed a task issue."})
+            test("revise returns decision:block", rev.get("decision") == "block", rev)
+            test("revise block carries explicit next_action",
+                 rev.get("reason") == "NEXT_ACTION: Revise TASK-001 validation and rerun tests.",
+                 rev)
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            loop = json.load(open(os.path.join(td, "loop_state.json"), encoding="utf-8"))
+            test("revise increments loop_state",
+                 data.get("last_verdict") == "revise"
+                 and data.get("loop_count") == 2
+                 and loop.get("loop_count") == 2
+                 and loop.get("auto_continue") is True,
+                 (data, loop))
+
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "continue",
+                    "reason": "missing action",
+                    "next_action": "",
+                    "auto_continue": True,
+                }),
+            }
+            missing_action = stop.stop_judge({
+                "last_assistant_message": "More work remains but no action was specified."
+            })
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            loop = json.load(open(os.path.join(td, "loop_state.json"), encoding="utf-8"))
+            test("continue without next_action fails safe",
+                 data.get("last_verdict") == "human_review"
+                 and loop.get("loop_count") == 0
+                 and loop.get("auto_continue") is False
+                 and "systemMessage" in missing_action,
+                 (data, loop, missing_action))
 
             responses = [
                 {
@@ -274,6 +379,20 @@ def test_stop_auto_continue_and_done_helpers():
             test("done writes completion report after evaluation",
                  "Stop Hook Done Record" in report and "Experience Evaluation" in report,
                  report)
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            loop = json.load(open(os.path.join(td, "loop_state.json"), encoding="utf-8"))
+            ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
+            test("done resets loop state and disables auto-continue",
+                 data.get("last_verdict") == "done"
+                 and data.get("loop_count") == 0
+                 and loop.get("loop_count") == 0
+                 and loop.get("auto_continue") is False
+                 and "AUTO_CONTINUE: disabled" in ctx,
+                 (data, loop, ctx))
+            test("done latest context has no manual-review next action",
+                 "NEXT_ACTION: None (task complete)" in ctx
+                 and "manual review required" not in ctx,
+                 ctx)
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
@@ -621,6 +740,81 @@ def test_stop_spec_update_required_pauses_worker():
             stop.WIKI_DIR = old_wiki
 
 
+def test_stop_spec_update_required_applies_when_sufficient():
+    print("\n[Stop spec update auto apply]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    old_update = stop.spec_steward.propose_spec_update
+    captured = {}
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        for name, content in {
+            "PROJECT_SPEC.md": _complete_project_spec(
+                "- [ ] TASK-001: Build app",
+                "- Tests pass.",
+            ),
+            "latest_context.md": "# Latest\nVERDICT: spec_update_required\nNEXT_ACTION: Add TASK-002.\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":1,"auto_continue":true}',
+        }.items():
+            with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                f.write(content)
+
+        try:
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "spec_update_required",
+                    "reason": "user confirmed the summarized contract update",
+                    "next_action": "Add TASK-002 for automatic contract updates.",
+                    "auto_continue": False,
+                    "progress_made": False,
+                    "questions": [],
+                }),
+            }
+
+            def fake_update(change_request, apply_update=False):
+                captured["change_request"] = change_request
+                captured["apply_update"] = apply_update
+                return {
+                    "ok": True,
+                    "applied": True,
+                    "decision": "apply",
+                    "reason": "confirmed update",
+                    "questions": [],
+                    "update_summary": "Added TASK-002.",
+                }
+
+            stop.spec_steward.propose_spec_update = fake_update
+            result = stop.stop_judge({
+                "last_assistant_message": (
+                    "The user said 同意. The confirmed contract update is to add TASK-002."
+                )
+            })
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
+            test("sufficient spec update calls Spec Steward apply",
+                 captured.get("apply_update") is True
+                 and "Add TASK-002" in captured.get("change_request", ""),
+                 captured)
+            test("applied spec update records pass state",
+                 data.get("last_verdict") == "pass"
+                 and data.get("auto_continue") is False
+                 and "Spec Steward applied" in data.get("reason", ""),
+                 data)
+            test("applied spec update updates latest context",
+                 "VERDICT: pass" in ctx and "Spec Steward applied" in ctx,
+                 ctx)
+            test("applied spec update returns system message",
+                 "controlled Spec Steward flow" in result.get("systemMessage", ""),
+                 result)
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+            stop.spec_steward.propose_spec_update = old_update
+
+
 def test_stop_github_sync_policy_gate():
     print("\n[Stop GitHub sync policy]")
     stop = _load_hook_module("stop_judge")
@@ -689,10 +883,13 @@ def test_stop_github_sync_policy_gate():
             full_policy = (
                 "## GitHub Sync Policy\n"
                 "- Mode: github-sync.\n"
+                "- GitHub account: owner.\n"
                 "- Auth method: local gh CLI login.\n"
                 "- Credentials: available through local gh auth.\n"
-                "- Repository: owner/name.\n"
+                "- Repository: existing repository owner/name.\n"
+                "- Repository creation policy: must use existing repository.\n"
                 "- Visibility: private.\n"
+                "- Marker nodes: after TASK completion, create local commit and push checkpoint when allowed.\n"
                 "- Allowed automatic operations: push, tag.\n"
                 "- Release requires human confirmation.\n"
             )
@@ -700,6 +897,13 @@ def test_stop_github_sync_policy_gate():
             test("complete policy allows configured auto push",
                  result.get("decision") == "block"
                  and data.get("last_verdict") == "continue",
+                 (result, data))
+
+            incomplete_policy = full_policy.replace("- GitHub account: owner.\n", "")
+            result, data = run_case(wiki, incomplete_policy, "Push changes to GitHub remote.")
+            test("incomplete GitHub sync policy blocks remote action",
+                 data.get("last_verdict") == "human_review"
+                 and "policy is incomplete" in data.get("reason", ""),
                  (result, data))
 
             unavailable = full_policy.replace(
@@ -983,6 +1187,65 @@ def test_spec_steward_controlled_update_flow():
                  and any("secret material" in item for item in secret.get("missing", []))
                  and fake_fine_grained_token[:22] not in current,
                  (secret, current))
+
+            latest_context = (
+                "VERDICT: spec_update_required\n"
+                "NEXT_ACTION: Add TASK-003 for confirmed export.\n"
+                "REASON: User asked for export support.\n"
+            )
+            confirmation_request = steward.build_user_prompt_change_request(
+                "同意", latest_context
+            )
+            test("spec steward turns confirmation into prior change request",
+                 "Add TASK-003" in confirmation_request
+                 and "manually edit" in confirmation_request,
+                 confirmation_request)
+
+            missing_context = steward.propose_user_prompt_update(
+                "同意", "", apply_update=True
+            )
+            test("spec steward asks when confirmation lacks prior context",
+                 missing_context.get("decision") == "needs_user_confirmation"
+                 and missing_context.get("applied") is False,
+                 missing_context)
+
+            rejected_confirmation = steward.propose_user_prompt_update(
+                "不同意", latest_context, apply_update=True
+            )
+            test("spec steward rejects refused confirmation without writing",
+                 rejected_confirmation.get("decision") == "reject"
+                 and rejected_confirmation.get("applied") is False
+                 and rejected_confirmation.get("source") == "user_prompt_rejection",
+                 rejected_confirmation)
+
+            ambiguous_confirmation = steward.propose_user_prompt_update(
+                "可以吧", latest_context, apply_update=True
+            )
+            test("spec steward asks on ambiguous confirmation",
+                 ambiguous_confirmation.get("decision") == "needs_user_confirmation"
+                 and ambiguous_confirmation.get("applied") is False
+                 and ambiguous_confirmation.get("source") == "user_prompt_ambiguous_confirmation"
+                 and ambiguous_confirmation.get("questions"),
+                 ambiguous_confirmation)
+
+            steward.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "decision": "needs_user_confirmation",
+                    "reason": "missing target platform",
+                    "questions": ["Which platform should export support target?"],
+                    "update_summary": "",
+                    "updated_project_spec": "",
+                }),
+            }
+            prompt_suggestion = steward.propose_user_prompt_update(
+                "需求改一下：增加导出功能。", latest_context, apply_update=True
+            )
+            test("spec steward routes direct suggestion through controlled flow",
+                 prompt_suggestion.get("decision") == "needs_user_confirmation"
+                 and prompt_suggestion.get("source") == "user_prompt_suggestion"
+                 and prompt_suggestion.get("questions"),
+                 prompt_suggestion)
         finally:
             steward.call_codex_default = old_call
             steward.WIKI_DIR = old_wiki
@@ -1045,9 +1308,72 @@ def test_hooks_json_cross_platform_fields():
 
     test("all command hooks include Windows command",
          all(hook.get("commandWindows") for hook in all_hooks), all_hooks)
+    test("hook commands are module commands, not shell scripts",
+         all(
+             hook.get("command", "").startswith("python -m hooks.")
+             and hook.get("commandWindows", "").startswith("py -3 -m hooks.")
+             and not any(token in hook.get("command", "") for token in ("&&", ";", "|", "/bin/sh"))
+             and not any(
+                 token in hook.get("commandWindows", "").lower()
+                 for token in ("&&", ";", "|", "cmd /c", "powershell")
+             )
+             for hook in all_hooks
+         ),
+         all_hooks)
     stop_hooks = data.get("hooks", {}).get("Stop", [])[0].get("hooks", [])
     test("Stop hook timeout is at least 60 seconds",
          stop_hooks and stop_hooks[0].get("timeout", 0) >= 60, stop_hooks)
+
+
+def test_cross_platform_path_helpers():
+    print("\n[cross-platform path helpers]")
+    policy = _load_hook_module("permission_policy")
+    diagnose = _load_module_at(
+        "diagnose_codex_exec_for_smoke",
+        os.path.join(ROOT_DIR, "tests", "diagnose_codex_exec.py"),
+    )
+
+    win_root = "C:" + "\\Users\\alice\\repo"
+    win_judge = win_root + "\\.project_wiki\\JUDGE.md"
+    win_hook = win_root + "\\hooks\\stop_judge.py"
+    win_hooks_json = win_root + "\\.codex\\hooks.json"
+    mac_judge = os.path.join(ROOT_DIR, ".project_wiki", "JUDGE.md")
+    mac_business = os.path.join(ROOT_DIR, "src", "main.py")
+
+    test("Windows absolute judge path is supervision file",
+         policy.is_supervision_file(win_judge), win_judge)
+    test("Windows absolute hooks.py path is supervision file",
+         policy.is_supervision_file(win_hook), win_hook)
+    test("Windows absolute hooks.json path is supervision file",
+         policy.is_supervision_file(win_hooks_json), win_hooks_json)
+    test("current macOS absolute judge path is supervision file",
+         policy.is_supervision_file(mac_judge), mac_judge)
+    test("current macOS business path is not supervision file",
+         not policy.is_supervision_file(mac_business), mac_business)
+
+    win_command = "Set-" + "Content " + win_judge + " updated"
+    win_paths = policy.extract_paths_from_command(win_command)
+    test("Windows PowerShell write command extracts target",
+         win_judge in win_paths, win_paths)
+    test("Windows PowerShell write command has write intent",
+         policy.command_has_write_intent("Set-" + "Content README.md updated"))
+
+    mac_paths = policy.extract_paths_from_patch(
+        "*** Begin Patch\n"
+        "*** Update File: %s\n"
+        "@@\n"
+        "+x\n"
+        "*** End Patch\n" % mac_judge
+    )
+    test("macOS absolute patch path extracts target",
+         mac_judge in mac_paths, mac_paths)
+
+    test("diagnostic command uses argument list",
+         diagnose.codex_version_command() == ["codex", "--version"],
+         diagnose.codex_version_command())
+    test("diagnostic hooks path resolves to current repo hooks",
+         os.path.realpath(diagnose.hooks_path()) == os.path.realpath(HOOKS_DIR),
+         diagnose.hooks_path())
 
 
 def test_project_path_resolution():
@@ -1123,7 +1449,14 @@ def test_project_injector_bootstrap_and_onboarding():
              any("最终" in q or "final" in q.lower() for q in empty_questions),
              empty_questions)
         test("empty project questions ask GitHub sync policy",
-             any("GitHub" in q and "local-only" in q and "token" in q for q in empty_questions),
+             any(
+                 "GitHub" in q
+                 and "local-only" in q
+                 and "token" in q
+                 and "账号" in q
+                 and "新建仓库" in q
+                 for q in empty_questions
+             ),
              empty_questions)
 
     with tempfile.TemporaryDirectory() as existing_dir:
@@ -1137,7 +1470,13 @@ def test_project_injector_bootstrap_and_onboarding():
              existing_info)
         existing_questions = injector.onboarding_questions(existing_info)
         test("existing project questions ask GitHub sync policy",
-             any("GitHub" in q and "公开" in q and "私有" in q for q in existing_questions),
+             any(
+                 "GitHub" in q
+                 and "公开" in q
+                 and "私有" in q
+                 and "人工确认" in q
+                 for q in existing_questions
+             ),
              existing_questions)
         wiki_only = injector.bootstrap_wiki_files(existing_dir)
         test("wiki bootstrap writes task-contract placeholder only",
@@ -1346,6 +1685,7 @@ def main():
     test_stop_prompt_keeps_development_plan_context()
     test_stop_loop_limit_counts_stalled_work_only()
     test_stop_spec_update_required_pauses_worker()
+    test_stop_spec_update_required_applies_when_sufficient()
     test_stop_github_sync_policy_gate()
     test_stop_onboarding_steward_writes_spec()
     test_stop_incomplete_project_spec_enters_onboarding()
@@ -1353,6 +1693,7 @@ def main():
     test_readme_task006_role_boundaries()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()
+    test_cross_platform_path_helpers()
     test_project_path_resolution()
     test_project_injector_bootstrap_and_onboarding()
     test_project_injector_runtime_upgrade()

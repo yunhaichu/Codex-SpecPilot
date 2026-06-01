@@ -7,6 +7,20 @@ import os
 import shutil
 import subprocess
 import json
+import sys
+from pathlib import Path
+
+
+def repo_root():
+    return Path(__file__).resolve().parents[1]
+
+
+def hooks_path():
+    return str(repo_root() / "hooks")
+
+
+def codex_version_command():
+    return ["codex", "--version"]
 
 
 def main():
@@ -17,7 +31,7 @@ def main():
 
     # 2. codex --version
     try:
-        ver = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=10)
+        ver = subprocess.run(codex_version_command(), capture_output=True, text=True, timeout=10)
         print("2. codex --version:", ver.stdout.strip() or ver.stderr.strip() or "unknown")
     except Exception as e:
         print("2. codex --version: error", e)
@@ -31,8 +45,7 @@ def main():
     # 4. Test codex exec
     print("\n4. Testing codex exec...")
     try:
-        import sys
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
+        sys.path.insert(0, hooks_path())
         from codex_client import call_codex_default
 
         result = call_codex_default("只输出 JSON：{\"ok\":true}", timeout=120)

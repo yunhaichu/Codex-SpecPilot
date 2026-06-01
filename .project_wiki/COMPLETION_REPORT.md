@@ -200,3 +200,84 @@ _No completion report yet._
 ### Filtered Suggestions
 
 - Running tests from inside .project_wiki may be less convenient, but the evidence indicates this is not the target user path and was already filtered as out-of-scope.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-01T09:25:24.496272+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Available evidence indicates the intended target-user path was already exercised: one-command unattended workflow completed to final_done, smoke tests passed, experience evaluation gate passed, GitHub policy stayed local-only where required, and v2.0 was published. The remaining local guard_log change is runtime state and not a user-facing completion blocker.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Available evidence indicates the intended target-user path was already exercised: one-command unattended workflow completed to final_done, smoke tests passed, experience evaluation gate passed, GitHub policy stayed local-only where required, and v2.0 was published. The remaining local guard_log change is runtime state and not a user-facing completion blocker.
+
+### Filtered Suggestions
+
+- A fresh post-release manual install test on another clean machine could add confidence, but this is broader release QA rather than an obvious issue from the available evidence.
+
+## TASK-005 Real Unattended Trial Record After TASK-003/TASK-004
+- Timestamp: 2026-06-01T10:24:50Z
+- Status: real-world verified pass.
+- Trial command: `codex exec --enable hooks --dangerously-bypass-hook-trust --skip-git-repo-check --json -C examples/minimal_supervised_project '开始工作'`
+- Trial result: exit code 0.
+- Thread id: `019e82b3-401e-7c02-bdf0-5791503a6ffc`.
+- User prompt count: one `开始工作`.
+- Precondition: `src/calculator.py` was intentionally reset to a failing state; example `python3 run_tests.py` failed with missing `add`.
+- Loop evidence:
+  - Stop Hook drove TASK-001, TASK-002, TASK-003, completion report, and final judgment with no additional user prompt.
+  - TASK-001 restored `add(a, b)` and `subtract(a, b)`.
+  - TASK-002 verified existing standard-library tests for both functions.
+  - TASK-003 verified README already documented the module purpose and `python run_tests.py`.
+  - Completion stage updated `examples/minimal_supervised_project/.project_wiki/COMPLETION_REPORT.md`.
+- TASK-010 gate evidence:
+  - `judge_latest.json`: `last_verdict=done`, `llm_ok=true`, `auto_continue=false`.
+  - `experience_evaluation.decision=final_done`.
+  - `experience_evaluation.status=issues filtered as low-value/out-of-scope`.
+  - `experience_evaluation.findings=[]`; filtered items were not converted to new requirements.
+  - `loop_state.json`: `last_verdict=done`, `loop_count=0`, `experience_evaluation_count=0`.
+- Validation:
+  - Example `python3 run_tests.py`: passed, 2 tests.
+  - SpecPilot `python3 tests/smoke_test.py`: passed, 121 tests.
+- GitHub sync status: local-only / no remote operation attempted.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-01T10:45:27.325132+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Current direct validation evidence shows the repository-root smoke path and minimal supervised project path both pass, contradicting the prior actionable finding. No remaining obvious target-user issue is supported by the provided evidence.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Current direct validation evidence shows the repository-root smoke path and minimal supervised project path both pass, contradicting the prior actionable finding. No remaining obvious target-user issue is supported by the provided evidence.
+
+### Filtered Suggestions
+
+- The prior smoke-test failure concern is filtered because the latest direct rerun passed `python3 tests/smoke_test.py` 124/124 from the repository root, py_compile passed, and the minimal supervised project test path passed 2/2.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-01T10:52:00.068023+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Current direct validation evidence shows the prior actionable issue was resolved or invalidated: `python3 tests/smoke_test.py` reportedly passed 124/124 with no FAIL lines and exited 0, py_compile passed, and the minimal supervised project tests passed 2/2. Given the available evidence, there is no remaining obvious target-user-facing blocker worth another development loop.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Current direct validation evidence shows the prior actionable issue was resolved or invalidated: `python3 tests/smoke_test.py` reportedly passed 124/124 with no FAIL lines and exited 0, py_compile passed, and the minimal supervised project tests passed 2/2. Given the available evidence, there is no remaining obvious target-user-facing blocker worth another development loop.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-01T10:53:42.832541+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.

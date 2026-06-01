@@ -19,6 +19,9 @@ PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
 LATEST_CONTEXT_PATH = os.path.join(WIKI_DIR, "latest_context.md")
 
 VALID_DECISIONS = ("apply", "needs_user_confirmation", "reject")
+MAX_PROJECT_SPEC_PROMPT_CHARS = 50000
+MAX_LATEST_CONTEXT_PROMPT_CHARS = 6000
+MAX_CHANGE_REQUEST_PROMPT_CHARS = 8000
 REQUIRED_SPEC_TERMS = (
     "Project Mode",
     "Project Goal",
@@ -32,6 +35,98 @@ REQUIRED_SPEC_TERMS = (
     "Submission Requirements",
     "GitHub",
 )
+CONFIRMATION_TERMS = {
+    "同意",
+    "确认",
+    "确认更新",
+    "可以",
+    "好的",
+    "好",
+    "没问题",
+    "行",
+    "yes",
+    "y",
+    "ok",
+    "okay",
+    "approved",
+    "approve",
+    "apply",
+    "goahead",
+    "sounds good",
+}
+REJECTION_TERMS = {
+    "不同意",
+    "不确认",
+    "不要改",
+    "不要更新",
+    "先不要",
+    "取消",
+    "算了",
+    "no",
+    "n",
+    "reject",
+    "rejected",
+    "cancel",
+    "decline",
+    "disagree",
+}
+AMBIGUOUS_CONFIRMATION_TERMS = {
+    "可以吧",
+    "也行吧",
+    "应该可以",
+    "随便",
+    "再说",
+    "maybe",
+    "probably",
+    "not sure",
+}
+
+
+def _normalize_response(text):
+    return "".join((text or "").strip().lower().split()).strip("。.!！?？,，;；:：")
+
+
+def is_confirmation_only(text):
+    normalized = _normalize_response(text)
+    if not normalized or normalized.startswith("不"):
+        return False
+    return normalized in CONFIRMATION_TERMS
+
+
+def is_rejection_only(text):
+    normalized = _normalize_response(text)
+    return normalized in REJECTION_TERMS
+
+
+def is_ambiguous_confirmation(text):
+    normalized = _normalize_response(text)
+    return normalized in AMBIGUOUS_CONFIRMATION_TERMS
+
+
+def latest_context_requires_spec_update(latest_context):
+    return "VERDICT: spec_update_required" in (latest_context or "")
+
+
+def build_user_prompt_change_request(prompt_text, latest_context=""):
+    prompt_text = (prompt_text or "").strip()
+    latest_context = latest_context or ""
+    if is_confirmation_only(prompt_text):
+        if not latest_context_requires_spec_update(latest_context):
+            return ""
+        return (
+            "The user confirmed the previously summarized task-contract change. "
+            "Apply the controlled PROJECT_SPEC update described by Latest Judge Context. "
+            "Do not ask the user to manually edit task-book files.\n\n"
+            "LATEST_CONTEXT:\n%s" % latest_context
+        )
+    return (
+        "The user provided a task-contract modification suggestion. Run the "
+        "controlled Spec Steward update flow. If the suggestion is sufficient, "
+        "write the complete updated PROJECT_SPEC and update the Development Plan. "
+        "If information is insufficient, ask only the minimum clarifying questions. "
+        "Do not ask the user to manually edit task-book files.\n\n"
+        "USER_PROMPT:\n%s" % prompt_text
+    )
 
 
 def _read_file(path, default=""):
@@ -95,7 +190,15 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "\"updated_project_spec\":\"full markdown PROJECT_SPEC or empty\"}\n"
         "Rules:\n"
         "- Only encode the user's confirmed change request.\n"
-        "- If the change is ambiguous or conflicts with the current contract, return needs_user_confirmation.\n"
+        "- If the user provided a modification suggestion and the requested contract "
+        "change is clear enough, apply it directly through this controlled flow.\n"
+        "- If the user only replied with an approval such as 同意, yes, ok, or apply, "
+        "treat it as confirmation of the spec_update_required change in latest context.\n"
+        "- If the user clearly rejects the summarized change, do not apply it. "
+        "If confirmation wording is ambiguous, ask the minimum confirmation question.\n"
+        "- If the change is ambiguous or conflicts with the current contract, return "
+        "needs_user_confirmation with only the minimum necessary questions.\n"
+        "- Never tell the user to manually edit PROJECT_SPEC.md or task-book files.\n"
         "- Preserve judge-system protected scope unless the user explicitly changes SpecPilot itself.\n"
         "- Preserve or add GitHub sync policy. If upload/sync is not confirmed, use local-only.\n"
         "- Never request, write, or expose API keys, tokens, or secrets.\n"
@@ -106,7 +209,11 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "CURRENT PROJECT_SPEC:\n```\n%s\n```\n\n"
         "LATEST CONTEXT:\n```\n%s\n```\n\n"
         "USER CHANGE REQUEST:\n```\n%s\n```\n"
-        % (current_spec[:12000], latest_context[:2000], change_request[:4000])
+        % (
+            current_spec[:MAX_PROJECT_SPEC_PROMPT_CHARS],
+            latest_context[:MAX_LATEST_CONTEXT_PROMPT_CHARS],
+            change_request[:MAX_CHANGE_REQUEST_PROMPT_CHARS],
+        )
     )
 
 
@@ -188,6 +295,44 @@ def propose_spec_update(change_request, apply_update=False):
     else:
         response["updated_project_spec"] = updated_spec
     return response
+
+
+def propose_user_prompt_update(prompt_text, latest_context="", apply_update=True):
+    if latest_context_requires_spec_update(latest_context):
+        if is_rejection_only(prompt_text):
+            return {
+                "ok": True,
+                "applied": False,
+                "decision": "reject",
+                "reason": "User rejected the previously summarized task-contract change.",
+                "questions": ["如需改成其他方向，请直接说明新的任务合同修改建议。"],
+                "update_summary": "",
+                "source": "user_prompt_rejection",
+            }
+        if is_ambiguous_confirmation(prompt_text):
+            return {
+                "ok": True,
+                "applied": False,
+                "decision": "needs_user_confirmation",
+                "reason": "User confirmation is ambiguous and cannot be treated as 同意.",
+                "questions": ["请明确回复“同意”以应用这次任务合同更新，或说明要怎样调整。"],
+                "update_summary": "",
+                "source": "user_prompt_ambiguous_confirmation",
+            }
+
+    change_request = build_user_prompt_change_request(prompt_text, latest_context)
+    if not change_request:
+        return {
+            "ok": True,
+            "applied": False,
+            "decision": "needs_user_confirmation",
+            "reason": "User confirmation has no prior spec_update_required context.",
+            "questions": ["请先说明要调整的任务合同内容。"],
+            "update_summary": "",
+        }
+    result = propose_spec_update(change_request, apply_update=apply_update)
+    result["source"] = "user_prompt_confirmation" if is_confirmation_only(prompt_text) else "user_prompt_suggestion"
+    return result
 
 
 def main(argv=None):

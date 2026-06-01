@@ -35,9 +35,20 @@ GOAL_CHANGE_RULE = """
 If the user's prompt changes the project goal, scope, priority, acceptance
 criteria, or Development Plan, do not edit business code in that turn.
 Summarize the requested contract change, list the affected PROJECT_SPEC
-sections, and state that the task contract must be updated by the controlled
-Spec Steward flow before worker development continues. Codex Worker must not
-modify PROJECT_SPEC.md itself.
+sections, and make the change request clear enough for the controlled Spec
+Steward flow. Do not ask the user to manually edit PROJECT_SPEC.md or task-book
+files.
+
+If latest context already says spec_update_required and the user replies "同意",
+"yes", "ok", "apply", or an equivalent confirmation, treat that as permission
+for Spec Steward to apply the previously summarized change.
+If the user rejects the summarized change or uses ambiguous confirmation
+wording, do not apply the task contract update; ask only the minimum
+confirmation or replacement-change question.
+
+The task contract must be updated by the controlled Spec Steward flow before
+worker development continues. Codex Worker must not modify PROJECT_SPEC.md
+itself.
 """
 
 ONBOARDING_RULE = """
@@ -53,9 +64,12 @@ Criteria. Codex Worker must not write PROJECT_SPEC.md directly; the controlled
 SpecPilot Hook flow writes the task contract.
 
 GitHub sync must be decided during onboarding. Ask whether the user wants
-GitHub upload/sync. If not, default to local-only. If yes, ask for auth method
-without requesting token/key text, repository owner/name, public/private
-visibility, and which push/tag/checkpoint operations Hook may request.
+GitHub upload/sync. If not, default to local-only. If yes, ask for GitHub
+account, auth method without requesting token/key text, credential availability,
+repository owner/name, public/private visibility, whether a new repository may
+be created or an existing repository must be used, marker nodes, and which
+push/tag/release/checkpoint operations Hook may request automatically versus
+only after human confirmation.
 """
 
 
@@ -138,11 +152,9 @@ def user_prompt_submit(turn_payload):
 
     _ensure_project_wiki_files()
 
+    latest_context = _read_file(LATEST_CTX_FILE)
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
-        ctx_append = _read_file(LATEST_CTX_FILE)
-        if ctx_append is not None:
-            context += "\n--- Latest Judge Context ---\n" + ctx_append
     else:
         parts = []
         for fname in FALLBACK_FILES:
@@ -159,6 +171,8 @@ def user_prompt_submit(turn_payload):
         if onboarding:
             dynamic_context += "\n--- Project Onboarding ---\n" + onboarding
     dynamic_context += GOAL_CHANGE_RULE
+    if latest_context is not None:
+        dynamic_context += "\n--- Latest Judge Context ---\n" + latest_context
     start_end_prompt = _inject_start_work_prompt(prompt_text, onboarding_required=needs_onboarding)
     dynamic_context += start_end_prompt
     context = dynamic_context + "\n--- SpecPilot Base Context ---\n" + context

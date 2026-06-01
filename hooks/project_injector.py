@@ -47,8 +47,9 @@ MANAGED_WIKI_FILES = (
 
 ONBOARDING_MARKER = "NEEDS_USER_CONFIRMATION"
 GITHUB_SYNC_QUESTION = (
-    "是否需要同步或上传到 GitHub？如果不需要，默认 local-only；如果需要，请说明认证方式"
-    "（不要提供 token/密钥原文）、仓库 owner/name、公开或私有，以及允许 Hook 在哪些节点 push、tag 或 checkpoint。"
+    "是否需要同步或上传到 GitHub？如果不需要，默认 local-only；如果需要，请说明 GitHub 账号、认证方式"
+    "（不要提供 token/密钥原文）、凭据可用状态、仓库 owner/name、公开或私有、必须使用已有仓库还是允许新建仓库、"
+    "哪些 marker 节点需要 commit/push/tag/release，以及哪些操作可自动执行或必须人工确认。"
 )
 
 
@@ -145,7 +146,7 @@ def build_onboarding_markdown(project_info):
         "3. Do not invent requirements the user did not confirm.",
         "4. When enough information is known, output a complete PROJECT_SPEC candidate.",
         "5. Ask for GitHub sync preference during onboarding; default to local-only if upload is not needed.",
-        "6. If GitHub sync is requested, ask for auth method, public/private visibility, repo target, and allowed checkpoint/tag behavior.",
+        "6. If GitHub sync is requested, ask for GitHub account, auth method, credential availability, public/private visibility, repo target, existing-vs-new repository policy, marker nodes, and allowed automatic operations versus human confirmation.",
         "7. Never ask the user to paste API keys, tokens, or secrets into project files.",
         "8. Keep Allowed Scope concrete; do not use vague phrases like related files.",
         "",
