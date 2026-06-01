@@ -14,6 +14,14 @@ PROJECT_MARKERS = (
     "Package.swift",
 )
 
+IGNORED_LOCAL_NAMES = {
+    ".DS_Store",
+    ".project_wiki",
+    ".codex",
+    "hooks",
+    "__pycache__",
+}
+
 
 def _has_project_marker(path):
     if any((path / name).exists() for name in PROJECT_MARKERS):
@@ -27,6 +35,20 @@ def _has_project_marker(path):
 def _ancestors_from(path):
     yield path
     yield from path.parents
+
+
+def _has_project_content(path):
+    try:
+        return any(child.name not in IGNORED_LOCAL_NAMES for child in path.iterdir())
+    except OSError:
+        return False
+
+
+def _is_empty_dir(path):
+    try:
+        return not any(path.iterdir())
+    except OSError:
+        return False
 
 
 def _find_owner(start, predicate):
@@ -53,6 +75,10 @@ def project_root():
     cwd = Path(os.getcwd()).resolve()
     if (cwd / ".project_wiki").is_dir():
         return cwd
+
+    if cwd != fallback and not _has_project_marker(cwd):
+        if _is_empty_dir(cwd) or _has_project_content(cwd):
+            return cwd
 
     marker_owner = _find_owner(cwd, _has_project_marker)
     if marker_owner:

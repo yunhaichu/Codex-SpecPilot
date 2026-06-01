@@ -10,7 +10,7 @@ if os.environ.get("CODEX_SPECPILOT_CHILD") == "1":
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from project_paths import wiki_dir
-from project_injector import bootstrap_wiki_files
+from project_injector import ensure_runtime_files
 
 WIKI_DIR = wiki_dir()
 
@@ -62,7 +62,7 @@ def _read_file(rel_path):
 def _ensure_project_wiki_files():
     """Create the minimal project wiki when a Hook reaches a new project."""
     project_dir = os.path.dirname(WIKI_DIR)
-    bootstrap_wiki_files(project_dir, force=False)
+    ensure_runtime_files(project_dir, force=False)
 
 
 def _truncate(text):

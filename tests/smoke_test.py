@@ -6,6 +6,7 @@ judge-system boundary, AI decision plumbing, Stop auto-continue, and completion
 report writing.
 """
 import importlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -48,6 +49,13 @@ def _run_hook(script_name, child=False, input_text="{}"):
 def _load_hook_module(name):
     sys.path.insert(0, HOOKS_DIR)
     return importlib.import_module(name)
+
+
+def _load_module_at(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_user_prompt_submit():
@@ -754,6 +762,74 @@ def test_project_injector_bootstrap_and_onboarding():
             user_prompt.WIKI_DIR = old_wiki
 
 
+def test_project_injector_runtime_upgrade():
+    print("\n[Runtime upgrade]")
+    injector = _load_hook_module("project_injector")
+
+    with tempfile.TemporaryDirectory() as target_dir:
+        result = injector.bootstrap_project(target_dir)
+        test("runtime bootstrap writes manifest",
+             ".project_wiki/specpilot_manifest.json" in result.get("written", [])
+             or ".project_wiki/specpilot_manifest.json" in result.get("updated", []),
+             result)
+
+        spec_path = os.path.join(target_dir, ".project_wiki", "PROJECT_SPEC.md")
+        with open(spec_path, "w", encoding="utf-8") as f:
+            f.write("# PROJECT_SPEC\n\nCUSTOM CONTRACT MUST STAY\n")
+
+        hook_path = os.path.join(target_dir, "hooks", "user_prompt_submit.py")
+        with open(hook_path, "w", encoding="utf-8") as f:
+            f.write("# stale local hook\n")
+
+        injection_path = os.path.join(target_dir, ".project_wiki", "INJECTION.md")
+        with open(injection_path, "w", encoding="utf-8") as f:
+            f.write("# stale injection\n")
+
+        upgraded = injector.ensure_runtime_files(target_dir)
+        test("runtime upgrade refreshes stale hook",
+             "hooks/user_prompt_submit.py" in upgraded.get("updated", []),
+             upgraded)
+        test("runtime upgrade refreshes managed wiki instruction",
+             ".project_wiki/INJECTION.md" in upgraded.get("updated", []),
+             upgraded)
+        test("runtime upgrade preserves PROJECT_SPEC",
+             "CUSTOM CONTRACT MUST STAY" in open(spec_path, encoding="utf-8").read(),
+             open(spec_path, encoding="utf-8").read())
+
+        manifest_path = os.path.join(target_dir, ".project_wiki", "specpilot_manifest.json")
+        manifest = json.load(open(manifest_path, encoding="utf-8"))
+        test("runtime manifest records source root",
+             manifest.get("source_root") == ROOT_DIR and manifest.get("runtime_version"),
+             manifest)
+
+
+def test_macos_installer_config_generation():
+    print("\n[macOS installer]")
+    installer = _load_module_at(
+        "install_specpilot",
+        os.path.join(ROOT_DIR, "install", "macos", "install_specpilot.py"),
+    )
+
+    with tempfile.TemporaryDirectory() as codex_home:
+        result = installer.install(codex_home=codex_home)
+        hooks_path = os.path.join(codex_home, "hooks.json")
+        data = json.load(open(hooks_path, encoding="utf-8"))
+        text = open(hooks_path, encoding="utf-8").read()
+        test("installer writes hooks.json",
+             result.get("ok") and os.path.isfile(hooks_path),
+             result)
+        test("installer uses discovered repo root",
+             ROOT_DIR in text and "Codex-SpecPilot" in text,
+             text[:1000])
+        test("installer writes split PreToolUse matchers",
+             len(data.get("hooks", {}).get("PreToolUse", [])) == 4,
+             data)
+        second = installer.install(codex_home=codex_home)
+        test("installer is idempotent",
+             second.get("ok") and not second.get("changed"),
+             second)
+
+
 def main():
     print("=== Codex SpecPilot Light Smoke Tests ===")
     test_user_prompt_submit()
@@ -768,6 +844,8 @@ def main():
     test_hooks_json_cross_platform_fields()
     test_project_path_resolution()
     test_project_injector_bootstrap_and_onboarding()
+    test_project_injector_runtime_upgrade()
+    test_macos_installer_config_generation()
     print("\n=== Results ===")
     print("Passed: %d, Failed: %d" % (PASSED, FAILED))
     return 0 if FAILED == 0 else 1

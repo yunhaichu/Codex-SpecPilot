@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from codex_client import call_codex_default
 from project_paths import wiki_dir
-from project_injector import bootstrap_wiki_files
+from project_injector import ensure_runtime_files
 
 WIKI_DIR = wiki_dir()
 
@@ -96,7 +96,7 @@ def _write_file(path, content):
 
 
 def _ensure_project_wiki_files():
-    bootstrap_wiki_files(os.path.dirname(WIKI_DIR), force=False)
+    ensure_runtime_files(os.path.dirname(WIKI_DIR), force=False)
 
 
 def _project_spec_needs_onboarding(project_spec):

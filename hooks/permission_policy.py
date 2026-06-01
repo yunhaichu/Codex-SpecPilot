@@ -28,6 +28,7 @@ _SUPERVISION_FILES = [
      "judge_latest.json",
      "loop_state.json",
      "guard_log.jsonl",
+     "specpilot_manifest.json",
      "WORKFLOW.md",
      "COMPLETION_REPORT_TEMPLATE.md",
      "PROJECT_SPEC.md",

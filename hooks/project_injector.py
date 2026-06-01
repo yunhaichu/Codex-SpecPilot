@@ -8,7 +8,11 @@ import argparse
 import json
 import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
+
+SPEC_PILOT_RUNTIME_VERSION = "1.0"
+MANIFEST_FILE = "specpilot_manifest.json"
 
 IGNORED_NAMES = {
     ".DS_Store",
@@ -31,6 +35,15 @@ HOOK_FILES = (
     "user_prompt_submit.py",
 )
 
+MANAGED_WIKI_FILES = (
+    "INJECTION.md",
+    "WORKFLOW.md",
+    "PERMISSIONS.md",
+    "PROJECT_ONBOARDING.md",
+    "PROJECT_SPEC_TEMPLATE.md",
+    "COMPLETION_REPORT_TEMPLATE.md",
+)
+
 ONBOARDING_MARKER = "NEEDS_USER_CONFIRMATION"
 GITHUB_SYNC_QUESTION = (
     "是否需要同步或上传到 GitHub？如果不需要，默认 local-only；如果需要，请说明认证方式"
@@ -39,7 +52,18 @@ GITHUB_SYNC_QUESTION = (
 
 
 def source_root():
-    return Path(__file__).resolve().parents[1]
+    current_root = Path(__file__).resolve().parents[1]
+    manifest = current_root / ".project_wiki" / MANIFEST_FILE
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        configured = data.get("source_root")
+        if configured:
+            candidate = Path(configured).expanduser().resolve()
+            if (candidate / "hooks" / "project_injector.py").is_file():
+                return candidate
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    return current_root
 
 
 def _is_meaningful(path):
@@ -145,27 +169,44 @@ def _default_injection_text(src_root):
     )
 
 
+def _source_wiki_text(src_root, name, fallback):
+    path = src_root / ".project_wiki" / name
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    except OSError:
+        pass
+    return fallback
+
+
 def _wiki_defaults(root, project_info):
     src_root = source_root()
     return {
         "INJECTION.md": _default_injection_text(src_root),
-        "WORKFLOW.md": (
+        "WORKFLOW.md": _source_wiki_text(src_root, "WORKFLOW.md", (
             "# Workflow\n\n"
             "1. SpecPilot Hook auto-detects missing task-contract files.\n"
             "2. Codex interviews the user until requirements and GitHub sync policy are concrete.\n"
             "3. The controlled Hook flow writes `.project_wiki/PROJECT_SPEC.md`.\n"
             "4. User says: `开始工作`.\n"
             "5. Codex Worker develops from the task contract until done.\n"
-        ),
-        "PERMISSIONS.md": (
+        )),
+        "PERMISSIONS.md": _source_wiki_text(src_root, "PERMISSIONS.md", (
             "# Permissions\n\n"
             "Allowed Scope and Protected Scope are defined by `.project_wiki/PROJECT_SPEC.md`.\n\n"
             "Codex Worker must not modify `.project_wiki/PROJECT_SPEC.md` directly.\n"
             "The corresponding SpecPilot Hook may write task-contract and state files.\n"
             "GitHub push/tag/remote operations require explicit PROJECT_SPEC permission; "
             "default is local-only. Tokens and secrets must not be written to project files.\n"
-        ),
+        )),
         "PROJECT_ONBOARDING.md": build_onboarding_markdown(project_info),
+        "PROJECT_SPEC_TEMPLATE.md": _source_wiki_text(src_root, "PROJECT_SPEC_TEMPLATE.md", (
+            "# PROJECT_SPEC\n\n"
+            "## 0. Project Mode\n\n"
+            "`supervised_project_development`\n\n"
+            "## 1. Project Goal\n\n"
+            "NEEDS_USER_CONFIRMATION\n"
+        )),
         "PROJECT_SPEC.md": (
             "# PROJECT_SPEC\n\n"
             "%s\n\n"
@@ -187,14 +228,14 @@ def _wiki_defaults(root, project_info):
         }, indent=2),
         "JUDGE.md": "# Codex SpecPilot -- JUDGE\n\n_No judgments yet._\n",
         "guard_log.jsonl": "",
-        "COMPLETION_REPORT_TEMPLATE.md": (
+        "COMPLETION_REPORT_TEMPLATE.md": _source_wiki_text(src_root, "COMPLETION_REPORT_TEMPLATE.md", (
             "# Completion Report\n\n"
             "## Final Status\n\n"
             "- Status:\n"
             "- Completed tasks:\n"
             "- Modified files:\n"
             "- Validation:\n"
-        ),
+        )),
     }
 
 
@@ -212,6 +253,64 @@ def _copy_if_needed(src, dst, force=False):
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
     return True
+
+
+def _same_bytes(src, dst):
+    try:
+        return src.read_bytes() == dst.read_bytes()
+    except OSError:
+        return False
+
+
+def _copy_if_changed(src, dst, force=False):
+    if not src.exists():
+        return None
+    existed = dst.exists()
+    if existed and not force and _same_bytes(src, dst):
+        return None
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return "updated" if existed else "written"
+
+
+def _write_if_changed(path, content, force=False):
+    existed = path.exists()
+    if existed and not force:
+        try:
+            if path.read_text(encoding="utf-8") == content:
+                return None
+        except OSError:
+            pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return "updated" if existed else "written"
+
+
+def _record_action(action, rel_path, written, updated, skipped):
+    if action == "written":
+        written.append(rel_path)
+    elif action == "updated":
+        updated.append(rel_path)
+    else:
+        skipped.append(rel_path)
+
+
+def _managed_wiki_defaults(root, project_info):
+    defaults = _wiki_defaults(root, project_info)
+    return {name: defaults[name] for name in MANAGED_WIKI_FILES if name in defaults}
+
+
+def _write_manifest(root, src_root, written, updated, skipped, force=False):
+    manifest_path = root / ".project_wiki" / MANIFEST_FILE
+    data = {
+        "name": "Codex SpecPilot",
+        "runtime_version": SPEC_PILOT_RUNTIME_VERSION,
+        "source_root": str(src_root),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "managed_files": sorted(set(written + updated + skipped)),
+    }
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return _write_if_changed(manifest_path, text, force=force)
 
 
 def bootstrap_wiki_files(target_dir, force=False):
@@ -240,41 +339,68 @@ def bootstrap_wiki_files(target_dir, force=False):
     }
 
 
-def bootstrap_project(target_dir, force=False):
+def ensure_runtime_files(target_dir, force=False):
+    """Create or refresh the small SpecPilot runtime in a target project.
+
+    This is intentionally narrow: Hook code, hook config, and static wiki
+    instruction/template files are managed. The project contract, logs, judge
+    state, loop state, and completion report are never overwritten here.
+    """
     root = Path(target_dir).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    src_root = source_root()
-    written = []
-    skipped = []
+    src_root = source_root().resolve()
 
-    hooks_dir = root / "hooks"
-    for name in HOOK_FILES:
-        src = src_root / "hooks" / name
-        dst = hooks_dir / name
-        if _copy_if_needed(src, dst, force=force):
-            written.append(str(dst.relative_to(root)))
-        else:
-            skipped.append(str(dst.relative_to(root)))
+    base = bootstrap_wiki_files(root, force=False)
+    written = list(base.get("written", []))
+    updated = []
+    skipped = list(base.get("skipped", []))
 
-    hooks_config = root / ".codex" / "hooks.json"
-    if _copy_if_needed(src_root / ".codex" / "hooks.json", hooks_config, force=force):
-        written.append(str(hooks_config.relative_to(root)))
-    else:
-        skipped.append(str(hooks_config.relative_to(root)))
+    if root != src_root:
+        hooks_dir = root / "hooks"
+        for name in HOOK_FILES:
+            rel = "hooks/%s" % name
+            action = _copy_if_changed(src_root / "hooks" / name, hooks_dir / name, force=force)
+            _record_action(action, rel, written, updated, skipped)
 
-    wiki_result = bootstrap_wiki_files(root, force=force)
-    written.extend(wiki_result.get("written", []))
-    skipped.extend(wiki_result.get("skipped", []))
+        rel = ".codex/hooks.json"
+        action = _copy_if_changed(
+            src_root / ".codex" / "hooks.json",
+            root / ".codex" / "hooks.json",
+            force=force,
+        )
+        _record_action(action, rel, written, updated, skipped)
+
+        info = inspect_project(root)
+        for name, content in _managed_wiki_defaults(root, info).items():
+            rel = ".project_wiki/%s" % name
+            action = _write_if_changed(root / ".project_wiki" / name, content, force=force)
+            _record_action(action, rel, written, updated, skipped)
+
+    if root != src_root:
+        rel = ".project_wiki/%s" % MANIFEST_FILE
+        action = _write_manifest(root, src_root, written, updated, skipped, force=True)
+        _record_action(action, rel, written, updated, skipped)
 
     return {
         "ok": True,
         "target_dir": str(root),
-        "project": wiki_result.get("project", {}),
-        "questions": wiki_result.get("questions", []),
+        "source_root": str(src_root),
+        "runtime_version": SPEC_PILOT_RUNTIME_VERSION,
+        "project": inspect_project(root),
+        "questions": onboarding_questions(inspect_project(root)),
         "written": written,
+        "updated": updated,
         "skipped": skipped,
-        "next_action": "Open Codex in the target project; Hook onboarding will create or finish PROJECT_SPEC.",
+        "next_action": "SpecPilot runtime files are current; continue onboarding or development.",
     }
+
+
+def bootstrap_project(target_dir, force=False):
+    result = ensure_runtime_files(target_dir, force=force)
+    result["next_action"] = (
+        "Open Codex in the target project; Hook onboarding will create or finish PROJECT_SPEC."
+    )
+    return result
 
 
 def main(argv=None):
@@ -282,10 +408,13 @@ def main(argv=None):
     parser.add_argument("target", nargs="?", default=".", help="Target project directory.")
     parser.add_argument("--inspect", action="store_true", help="Only inspect and print onboarding questions.")
     parser.add_argument("--bootstrap", action="store_true", help="Create SpecPilot files in the target project.")
+    parser.add_argument("--upgrade", action="store_true", help="Refresh managed SpecPilot files in the target project.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing SpecPilot files.")
     args = parser.parse_args(argv)
 
-    if args.bootstrap:
+    if args.upgrade:
+        result = ensure_runtime_files(args.target, force=args.force)
+    elif args.bootstrap:
         result = bootstrap_project(args.target, force=args.force)
     else:
         info = inspect_project(args.target)

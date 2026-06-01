@@ -62,6 +62,8 @@ onboarding，避免 Codex Worker 在合同不完整时直接写业务代码。
 - Hook 应在必要开发节点根据用户确认的 `PROJECT_SPEC` GitHub 策略决定是否 commit、push、tag、release 或执行其他 GitHub marker 操作。
 - 如果 GitHub 策略缺失、含糊或凭据不可用，Hook 必须 fail safe：保持 local-only 或进入 `human_review`，不得假装同步成功。
 - 项目文件中不得存储 API key、token、private key、密码或其他 credential secret。
+- Hook 升级后，应能在目标项目运行时自动补齐或刷新受管 Hook 文件、Hook 配置和静态 Wiki 模板，以适配新版 Hook。
+- macOS 应提供一键安装入口；安装器不能依赖固定仓库路径，应自动识别自身所在目录和 Codex 配置目录，安装后用户只需在 Codex 中启用 Hook。
 
 ## 4. Non-Goals
 - 不做完整 GH 平台。
@@ -172,6 +174,12 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
   - Acceptance: onboarding 在正式 PROJECT_SPEC 确定前询问 local-only 或 GitHub sync；local-only 时不尝试 GitHub 操作；GitHub sync 时收集账号/认证方式描述但不保存 secret、public/private、新建或既有仓库、marker 节点、自动操作或人工确认策略；Hook 在策略缺失、含糊或凭据不可用时 fail safe 到 local-only 或 human_review；测试覆盖 local-only、策略完整、策略缺失、凭据不可用、禁止自动 push/tag/release 的场景。
   - Notes: 不引入完整 GitHub 平台、CI 管理、release platform、issue tracker、外层调度器或 credential 存储。
 
+- [ ] TASK-009: 支持 Hook 运行时自更新和 macOS 一键安装
+  - Goal: Hook 升级后，目标项目能自动补齐或刷新受管运行文件；macOS 用户能通过一键安装入口完成全局 Hook 安装。
+  - Scope: `hooks/project_injector.py`, `hooks/user_prompt_submit.py`, `hooks/stop_judge.py`, `hooks/permission_policy.py`, `install/macos/*`, `tests/*`, `README.md`, `.project_wiki/PROJECT_SPEC.md`
+  - Acceptance: Hook 运行时只刷新 `hooks/*.py`、`.codex/hooks.json` 和静态 `.project_wiki` 模板/说明文件；不覆盖 `PROJECT_SPEC.md`、JUDGE、latest_context、judge_latest、loop_state、guard_log、COMPLETION_REPORT；目标项目写入本地 manifest 用于后续升级；macOS 安装器自动识别仓库路径和 Codex 配置目录，写入用户级 `hooks.json`，不要求或保存 secret；测试覆盖运行时升级、PROJECT_SPEC 保留、安装器生成配置和幂等安装。
+  - Notes: 保持轻量；不做复杂包管理器、后台服务、外层调度器或自动远程更新。
+
 ## 8. Acceptance Criteria
 - 用户只输入一次 `开始工作` 后，Hook 能持续推动 Codex 继续开发或纠偏。
 - Stop Hook 能基于 AI 输出可靠处理 `continue | revise | done | human_review`。
@@ -185,6 +193,8 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
 - Hook 必须按 PROJECT_SPEC GitHub 策略在必要开发节点决定是否 commit、push、tag、release 或执行其他 GitHub marker 操作。
 - GitHub 策略缺失、含糊或凭据不可用时，Hook 必须 fail safe 到 local-only 或 `human_review`，不得声称同步成功。
 - 项目文件不得保存 API key、token、private key、密码或其他 credential secret。
+- Hook 升级后，目标项目中受管 Hook 文件、Hook 配置和静态 Wiki 模板能自动补齐或刷新，但不得覆盖任务合同、判断状态、日志、循环状态或完成报告。
+- macOS 一键安装器能自动定位自身仓库和 Codex 配置目录，安装用户级 Hook 配置，不依赖固定路径，不保存 secret。
 - `done` 时生成或更新 `.project_wiki/COMPLETION_REPORT.md`。
 - 判断体系文件不能被普通 Codex Worker 修改。
 - Hook 保持轻量，不引入复杂规则引擎、RAG、多 Agent、外层调度器、完整 GitHub 平台、CI 管理器、release platform 或 issue tracker。
