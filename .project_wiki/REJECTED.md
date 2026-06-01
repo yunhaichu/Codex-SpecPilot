@@ -1,4 +1,4 @@
-# Codex-WikiGuard — REJECTED
+# Codex SpecPilot — REJECTED
 
 Decisions that were considered but rejected.
 

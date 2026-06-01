@@ -1,14 +1,14 @@
-# Codex WikiGuard - INJECTION
+# Codex SpecPilot - INJECTION
 
 ## Core Mission
-WikiGuard exists to make Codex work continuously from a task book.
+SpecPilot exists to make Codex work continuously from a task book.
 
 The user prepares `.project_wiki/PROJECT_SPEC.md`, opens Codex in the project,
 and says `开始工作` once. After that, Codex should keep developing under Hook
 control until the task is complete or a real human decision is required.
 
 ## Work Loop
-When working under WikiGuard:
+When working under SpecPilot:
 
 1. Read `.project_wiki/PROJECT_SPEC.md`.
 2. Find the first incomplete `TASK-*` in Development Plan.
@@ -20,6 +20,38 @@ When working under WikiGuard:
    - whether the task is done;
    - what should happen next.
 5. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
+
+## Goal Change Rule
+Users may change project goals during development. When the current user prompt
+changes the project goal, scope, priority, acceptance criteria, or Development
+Plan:
+
+1. Do not continue ordinary business-code development in that turn.
+2. Do not edit `.project_wiki/PROJECT_SPEC.md` as Codex Worker.
+3. Summarize the requested contract change.
+4. List the affected PROJECT_SPEC sections.
+5. State the next required action as a controlled Spec Steward update before development continues.
+
+The Stop Hook should treat this as `spec_update_required`, not as normal
+`continue`. After the task contract is updated by the controlled spec-update
+flow, Codex Worker resumes from the new Development Plan.
+
+The controlled writer is the Spec Steward flow. It may update
+`.project_wiki/PROJECT_SPEC.md` only for a user-confirmed contract change.
+
+## GitHub Sync Rule
+SpecPilot defaults to local-only development unless PROJECT_SPEC explicitly
+enables GitHub sync.
+
+During onboarding, ask whether the user wants GitHub upload/sync. If not,
+record local-only. If yes, ask for auth method, repository owner/name, public
+or private visibility, and allowed push/tag/checkpoint behavior. Do not ask the
+user to paste API keys, tokens, or secrets into the project.
+
+During development, the Stop Hook may decide that a development node needs a
+local checkpoint, GitHub sync, tag, or other mark, but only within the GitHub
+policy recorded in PROJECT_SPEC. If the policy is missing or local-only, do not
+request remote push, remote tag, repository creation, or remote changes.
 
 ## Start Work Rule
 When the user says `开始工作`:
@@ -45,7 +77,7 @@ Codex Worker may develop project code, but must not edit the judge system that
 controls it.
 
 Worker must not modify these judge system files unless the current user command
-explicitly asks to develop WikiGuard itself:
+explicitly asks to develop SpecPilot itself:
 
 - `.project_wiki/PROJECT_SPEC.md`
 - `.project_wiki/PROJECT_SPEC_TEMPLATE.md`
@@ -100,7 +132,7 @@ Profile inheritance only:
 3. default Codex environment
 
 ## Current Priority
-Keep WikiGuard light.
+Keep SpecPilot light.
 
 Do not expand into a security platform, RAG system, graph memory, multi-agent
 framework, or external scheduler.

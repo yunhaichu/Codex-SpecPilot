@@ -1,4 +1,4 @@
-# Codex WikiGuard — WORKFLOW
+# Codex SpecPilot — WORKFLOW
 
 ## User Flow
 

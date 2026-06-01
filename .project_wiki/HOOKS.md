@@ -1,4 +1,4 @@
-# Codex-WikiGuard — HOOKS
+# Codex SpecPilot — HOOKS
 
 ## Available Hooks
 

@@ -1,4 +1,4 @@
-# Codex-WikiGuard — RULES
+# Codex SpecPilot — RULES
 
 ## General
 
@@ -41,7 +41,7 @@
      - `JUDGE.md` (human audit, includes full assistant message)
      - `latest_context.md` (short summary, NOT injected into next prompt)
      - `judge_latest.json` (machine-readable with verdict, timestamp, reason, auto_continue, next_action)
-- **Return**: `{ "systemMessage": "Codex-WikiGuard wrote human_review judgment." }`
+- **Return**: `{ "systemMessage": "Codex SpecPilot wrote human_review judgment." }`
 - **Default verdict**: `human_review` — no auto-loop, no `decision: block`.
 
 ## Local Model Mode Rules

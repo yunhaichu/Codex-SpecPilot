@@ -1,115 +1,77 @@
-# Codex WikiGuard
+# Codex SpecPilot
 
-Codex WikiGuard is a lightweight AI-controlled development loop for Codex.
+Codex SpecPilot is a public, MIT-licensed project for running Codex from a clear project specification.
 
-The intended user flow is simple:
+It helps a user turn a rough idea into a structured task contract, then lets Codex keep working under Hook supervision until the work is done, blocked, or needs a real human decision.
 
-1. The user and AI turn requirements into `.project_wiki/PROJECT_SPEC.md`.
-2. The user opens Codex in the project directory.
-3. The user says `开始工作` once.
-4. Codex develops from the task book.
-5. Hooks use AI judgment to decide whether Codex should continue, revise, finish, or stop for human review.
-6. When done, WikiGuard records completion in `.project_wiki/COMPLETION_REPORT.md`.
+## What It Can Do
 
-The goal is unattended progress from a written task book. WikiGuard is not a full security platform, workflow engine, RAG system, graph memory, or multi-agent framework.
+- Create the minimal `.project_wiki` files when a project has no task contract yet.
+- Guide onboarding for empty projects and existing projects.
+- Ask for the project goal, allowed scope, protected scope, validation method, and GitHub sync preference before development starts.
+- Default to local-only development when GitHub upload or sync is not needed.
+- Record a GitHub sync policy when the user enables it, including auth method, public/private visibility, repository target, and allowed push/tag/checkpoint behavior without storing secrets.
+- Write or update `.project_wiki/PROJECT_SPEC.md` through a controlled Hook flow instead of letting the ordinary Codex worker edit the task contract directly.
+- Inject the current task contract and project state into Codex before each user prompt.
+- Block ordinary worker edits to judge-system files such as `PROJECT_SPEC.md`, Hook source, Hook config, and supervision state.
+- Ask the current Codex default model to judge whether work should continue, revise, finish, or stop for human review.
+- Automatically continue the Codex loop when the Stop Hook decides the next step is clear and allowed.
+- Pause development when the user changes project goals, scope, priorities, or acceptance criteria, then require a controlled task-contract update.
+- Generate or update a completion report when the task contract is satisfied.
 
-## Core Idea
+Codex SpecPilot stays intentionally small. It is not a full GitHub platform, CI system, release system, RAG system, graph database, long-term memory system, workflow orchestrator, or multi-agent platform.
 
-WikiGuard has three Hooks:
+## Basic Flow
 
-| Hook | Role |
-| --- | --- |
-| `UserPromptSubmit` | Injects a short task and status context before Codex starts or continues work. |
-| `PreToolUse` | Keeps the judge system from being modified by the Codex worker and can ask AI to judge tool intent. |
-| `Stop` | The main controller. It asks AI whether to `continue`, `revise`, `done`, or `human_review`, then drives the next turn when appropriate. |
+1. Open Codex in the target project directory.
+2. If no task contract exists, Codex SpecPilot creates the minimal project Wiki files and starts onboarding.
+3. The user answers the onboarding questions.
+4. The controlled Hook flow writes `.project_wiki/PROJECT_SPEC.md`.
+5. The user says `开始工作`.
+6. Codex works through the Development Plan.
+7. Hooks judge progress, direction, permissions, completion, and whether the loop should continue.
+8. When all acceptance criteria are met, Codex SpecPilot records the completion result.
 
-Most project direction decisions should be made by AI:
+## License
 
-- Is Codex still following `PROJECT_SPEC.md`?
-- Is the current task complete?
-- Should Codex continue?
-- Should Codex revise direction?
-- Is the whole project done?
+MIT
 
-Deterministic code should stay small and mechanical:
+---
 
-- prevent recursive Hook calls with `CODEX_WIKIGUARD_CHILD=1`;
-- call `codex exec` with the current default model;
-- parse JSON responses;
-- track loop count;
-- prevent the Codex worker from editing the judge system;
-- fail closed when AI judgment is unavailable.
+# Codex SpecPilot
 
-## Judge System Boundary
+Codex SpecPilot 是一个公开的 MIT 许可证项目，用来让 Codex 按清晰的项目任务书持续开发。
 
-Codex may edit project code. It must not edit the files that control or record the judgment system unless the user is explicitly developing WikiGuard itself.
+它帮助用户把粗略需求整理成结构化任务合同，然后让 Codex 在 Hook 监督下持续工作，直到任务完成、环境阻塞，或确实需要人工判断。
 
-Judge system files include:
+## 它能做什么
 
-- `.project_wiki/PROJECT_SPEC.md`
-- `.project_wiki/PROJECT_SPEC_TEMPLATE.md`
-- `.project_wiki/RULES.md`
-- `.project_wiki/DECISIONS.md`
-- `.project_wiki/REJECTED.md`
-- `.project_wiki/PERMISSIONS.md`
-- `.project_wiki/WORKFLOW.md`
-- `.project_wiki/JUDGE.md`
-- `.project_wiki/latest_context.md`
-- `.project_wiki/judge_latest.json`
-- `.project_wiki/loop_state.json`
-- `.project_wiki/guard_log.jsonl`
-- `.codex/hooks.json`
-- `hooks/*.py`
+- 当项目还没有任务合同时，自动创建最小 `.project_wiki` 文件。
+- 支持空项目和老项目接管。
+- 在开发前询问项目目标、允许范围、保护范围、验证方式和 GitHub 同步策略。
+- 如果用户不需要 GitHub 上传或同步，默认使用本地模式。
+- 如果用户启用 GitHub 同步，记录认证方式、公开/私有、仓库目标、允许的 push/tag/checkpoint 行为，但不保存密钥。
+- 通过受控 Hook 流程写入或更新 `.project_wiki/PROJECT_SPEC.md`，避免普通 Codex Worker 直接修改任务合同。
+- 每轮用户输入前，把当前任务合同和项目状态注入给 Codex。
+- 阻止普通 Worker 修改判断体系文件，例如 `PROJECT_SPEC.md`、Hook 源码、Hook 配置和监督状态。
+- 使用当前 Codex 默认模型判断是否继续、纠偏、完成或进入人工确认。
+- 当 Stop Hook 判断下一步明确且允许时，自动推动 Codex 继续工作。
+- 当用户在开发中修改目标、范围、优先级或验收标准时，暂停开发并要求先更新任务合同。
+- 当任务合同满足后，生成或更新完成报告。
 
-The corresponding Hooks may update their own state files.
+Codex SpecPilot 保持轻量。它不是完整 GitHub 平台、CI 系统、发布系统、RAG 系统、图数据库、长期记忆系统、流程编排器或多 Agent 平台。
 
-## Model Rule
+## 基本流程
 
-Hooks call the current Codex environment:
+1. 在目标项目目录打开 Codex。
+2. 如果还没有任务合同，Codex SpecPilot 自动创建最小项目 Wiki 文件并进入 onboarding。
+3. 用户回答 onboarding 问题。
+4. 受控 Hook 流程写入 `.project_wiki/PROJECT_SPEC.md`。
+5. 用户输入 `开始工作`。
+6. Codex 按 Development Plan 开发。
+7. Hook 判断进度、方向、权限、完成状态，以及是否继续循环。
+8. 所有验收条件满足后，Codex SpecPilot 记录完成结果。
 
-```bash
-codex exec
-```
+## 许可证
 
-They do not pass `-m`, do not configure a separate model, and do not hardcode a provider, endpoint, profile, GPT model, or local model.
-
-Profile inheritance is allowed only through:
-
-1. `CODEX_WIKIGUARD_PROFILE`
-2. `CODEX_PROFILE`
-3. default Codex configuration
-
-## Current Status
-
-Implemented foundations:
-
-- Hook registration for `UserPromptSubmit`, `PreToolUse`, and `Stop`.
-- `codex exec` wrapper using the current default model.
-- Profile inheritance through environment variables.
-- Recursive guard through `CODEX_WIKIGUARD_CHILD=1`.
-- Stop Hook state files and loop counter.
-- Minimal supervised example project.
-
-Direction now being corrected:
-
-- Keep Hooks light.
-- Make `Stop` the main automatic development controller.
-- Move project direction decisions to AI judgment.
-- Avoid expanding `PreToolUse` into a large hardcoded permission engine.
-- Add macOS and Windows compatibility checks.
-
-## Local Checks
-
-Basic syntax check:
-
-```bash
-python -m py_compile hooks/*.py tests/*.py
-```
-
-Codex execution diagnostic:
-
-```bash
-python tests/diagnose_codex_exec.py
-```
-
-The full smoke test may invoke Hooks that write state files, so run it only when intentionally testing the Hook loop.
+MIT

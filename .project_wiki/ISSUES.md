@@ -1,4 +1,4 @@
-# Codex-WikiGuard — ISSUES
+# Codex SpecPilot — ISSUES
 
 ## Open
 

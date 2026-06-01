@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-user-prompt",
+                        "name": "spec-pilot-user-prompt",
                         "command": "python -m hooks.user_prompt_submit",
                         "commandWindows": "py -3 -m hooks.user_prompt_submit",
                         "timeout": 10,
@@ -21,7 +21,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-tool-guard-bash",
+                        "name": "spec-pilot-tool-guard-bash",
                         "command": "python -m hooks.pre_tool_guard",
                         "commandWindows": "py -3 -m hooks.pre_tool_guard",
                         "timeout": 10,
@@ -34,7 +34,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-tool-guard-apply-patch",
+                        "name": "spec-pilot-tool-guard-apply-patch",
                         "command": "python -m hooks.pre_tool_guard",
                         "commandWindows": "py -3 -m hooks.pre_tool_guard",
                         "timeout": 10,
@@ -47,7 +47,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-tool-guard-edit",
+                        "name": "spec-pilot-tool-guard-edit",
                         "command": "python -m hooks.pre_tool_guard",
                         "commandWindows": "py -3 -m hooks.pre_tool_guard",
                         "timeout": 10,
@@ -60,7 +60,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-tool-guard-write",
+                        "name": "spec-pilot-tool-guard-write",
                         "command": "python -m hooks.pre_tool_guard",
                         "commandWindows": "py -3 -m hooks.pre_tool_guard",
                         "timeout": 10,
@@ -75,7 +75,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "name": "wiki-guard-stop-judge",
+                        "name": "spec-pilot-stop-judge",
                         "command": "python -m hooks.stop_judge",
                         "commandWindows": "py -3 -m hooks.stop_judge",
                         "timeout": 60,

@@ -1,4 +1,4 @@
-"""PreToolUse hook -- light tool gate for the WikiGuard judge system.
+"""PreToolUse hook -- light tool gate for the SpecPilot judge system.
 
 The goal is not to build a large hardcoded security engine. This hook keeps
 Codex Worker away from the judge system and lets AI judge ordinary write intent.
@@ -15,7 +15,7 @@ from permission_policy import (load_project_mode, is_supervision_file,
 from codex_client import call_codex_default
 from project_paths import wiki_dir
 
-REASON_TEMPLATE = "Blocked by Codex-WikiGuard: %s"
+REASON_TEMPLATE = "Blocked by Codex SpecPilot: %s"
 
 # Guard log path
 WIKI_DIR = wiki_dir()
@@ -112,7 +112,7 @@ def _extract_targets(turn_payload):
 
 
 def _is_self_dev_allowed_supervision_target(path, project_spec):
-    """Allow explicit WikiGuard self-development files in self-dev mode."""
+    """Allow explicit SpecPilot self-development files in self-dev mode."""
     if load_project_mode(project_spec) != "wikiguard_self_development":
         return False
     normalized = os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
@@ -155,7 +155,7 @@ def _soft_judge(tool_name, command, file_paths, project_spec):
         perm_summary += "Target paths: " + ", ".join(file_paths) + "\n"
 
     prompt = (
-        "You are Codex-WikiGuard PreToolUse soft judge.\n"
+        "You are Codex SpecPilot PreToolUse soft judge.\n"
         "PROJECT_SPEC.md content:\n```\n%s\n```\n\n"
         "Permission summary:\n%s\n\n"
         "Tool: %s\n"

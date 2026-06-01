@@ -1,4 +1,4 @@
-# Codex-WikiGuard — CURRENT_TASK
+# Codex SpecPilot — CURRENT_TASK
 
 > Update this file when starting a new round of development.
 

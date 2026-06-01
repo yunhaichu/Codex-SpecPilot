@@ -1,4 +1,4 @@
-"""Minimal calculator module for WikiGuard supervised workflow test."""
+"""Minimal calculator module for SpecPilot supervised workflow test."""
 
 
 def add(a, b):

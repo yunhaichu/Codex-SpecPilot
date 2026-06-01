@@ -1,4 +1,4 @@
-"""Permission policy module for Codex WikiGuard.
+"""Permission policy module for Codex SpecPilot.
 
 Determines whether Codex Worker or a Hook may write to a given file path.
 Uses Python standard library only. No LLM calls.
@@ -315,7 +315,7 @@ def command_has_write_intent(command):
 def get_permission_summary():
     """Return a short permission summary for injection into Codex prompts."""
     return (
-         "# Permission Summary (Codex WikiGuard)\n"
+         "# Permission Summary (Codex SpecPilot)\n"
          "Codex Worker MUST NOT modify:\n"
          "- .project_wiki/PROJECT_SPEC.md, RULES.md, DECISIONS.md, REJECTED.md, PERMISSIONS.md\n"
          "- .project_wiki/JUDGE.md, latest_context.md, judge_latest.json,\n"

@@ -1,4 +1,4 @@
-# Codex-WikiGuard — DECISIONS
+# Codex SpecPilot — DECISIONS
 
 ## D001 — No LLM in v1
 

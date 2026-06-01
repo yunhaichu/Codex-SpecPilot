@@ -10,13 +10,45 @@ if os.environ.get("CODEX_WIKIGUARD_CHILD") == "1":
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from project_paths import wiki_dir
+from project_injector import bootstrap_wiki_files
 
 WIKI_DIR = wiki_dir()
 
 PRIMARY_FILE = "INJECTION.md"
 LATEST_CTX_FILE = "latest_context.md"
+PROJECT_SPEC_FILE = "PROJECT_SPEC.md"
+PROJECT_ONBOARDING_FILE = "PROJECT_ONBOARDING.md"
 FALLBACK_FILES = ["HOME.md", "RULES.md", "CURRENT_TASK.md", "JUDGE.md"]
 MAX_CONTEXT_CHARS = 6000
+
+GOAL_CHANGE_RULE = """
+
+### Goal Change Rule ###
+If the user's prompt changes the project goal, scope, priority, acceptance
+criteria, or Development Plan, do not edit business code in that turn.
+Summarize the requested contract change, list the affected PROJECT_SPEC
+sections, and state that the task contract must be updated by the controlled
+Spec Steward flow before worker development continues. Codex Worker must not
+modify PROJECT_SPEC.md itself.
+"""
+
+ONBOARDING_RULE = """
+
+### Project Onboarding Rule ###
+If PROJECT_SPEC.md is missing or contains NEEDS_USER_CONFIRMATION, the project
+is not ready for worker development. Do not edit business code. Interview the
+user with at most 5 high-signal questions per round. In every onboarding reply,
+summarize the confirmed facts so far. When enough information is confirmed,
+output a complete PROJECT_SPEC candidate with concrete Allowed Scope,
+Protected Scope, Development Plan, and Acceptance Criteria. Codex Worker must
+not write PROJECT_SPEC.md directly; the controlled SpecPilot Hook flow writes
+the task contract.
+
+GitHub sync must be decided during onboarding. Ask whether the user wants
+GitHub upload/sync. If not, default to local-only. If yes, ask for auth method
+without requesting token/key text, repository owner/name, public/private
+visibility, and which push/tag/checkpoint operations Hook may request.
+"""
 
 
 def _read_file(rel_path):
@@ -27,19 +59,32 @@ def _read_file(rel_path):
         return f.read()
 
 
+def _ensure_project_wiki_files():
+    """Create the minimal project wiki when a Hook reaches a new project."""
+    project_dir = os.path.dirname(WIKI_DIR)
+    bootstrap_wiki_files(project_dir, force=False)
+
+
 def _truncate(text):
     if len(text) > MAX_CONTEXT_CHARS:
-        return text[:MAX_CONTEXT_CHARS] + (
-            "\n\n[TRUNCATED BY Codex-WikiGuard: injection context exceeded limit]"
-        )
+        suffix = "\n\n[TRUNCATED BY Codex SpecPilot: injection context exceeded limit]"
+        return text[:MAX_CONTEXT_CHARS - len(suffix)] + suffix
     return text
 
 
-def _inject_start_work_prompt(prompt_text):
+def _inject_start_work_prompt(prompt_text, onboarding_required=False):
     """If user says '开始工作', inject start work instruction."""
     if not prompt_text:
         return ""
     if "开始工作" in prompt_text:
+        if onboarding_required:
+            return (
+                "\n\n### Start Work Deferred ###\n"
+                "User said '开始工作', but PROJECT_SPEC.md is missing or incomplete. "
+                "Do not start worker development yet. Continue project onboarding, "
+                "ask the missing questions, and produce a PROJECT_SPEC candidate for "
+                "the controlled SpecPilot Hook flow to write.\n"
+            )
         return (
             "\n\n### Start Work Instruction ###\n"
             "User has said '开始工作'. You must:\n"
@@ -61,6 +106,13 @@ def _inject_start_work_prompt(prompt_text):
     return ""
 
 
+def _project_spec_needs_onboarding():
+    spec = _read_file(PROJECT_SPEC_FILE)
+    if spec is None:
+        return True
+    return "NEEDS_USER_CONFIRMATION" in spec
+
+
 def user_prompt_submit(turn_payload):
     """Called before every user prompt.
 
@@ -74,6 +126,8 @@ def user_prompt_submit(turn_payload):
     if isinstance(turn_payload, dict):
         prompt_text = turn_payload.get("prompt", "") or ""
 
+    _ensure_project_wiki_files()
+
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
         ctx_append = _read_file(LATEST_CTX_FILE)
@@ -86,9 +140,18 @@ def user_prompt_submit(turn_payload):
             parts.append("### %s ###\n%s" % (fname, content))
         context = "\n\n".join(parts)
 
-    # Append work flow instruction (start/end)
-    start_end_prompt = _inject_start_work_prompt(prompt_text)
-    context += start_end_prompt
+    # Put dynamic control rules first so truncation cannot remove them.
+    dynamic_context = ""
+    needs_onboarding = _project_spec_needs_onboarding()
+    if needs_onboarding:
+        dynamic_context += ONBOARDING_RULE
+        onboarding = _read_file(PROJECT_ONBOARDING_FILE)
+        if onboarding:
+            dynamic_context += "\n--- Project Onboarding ---\n" + onboarding
+    dynamic_context += GOAL_CHANGE_RULE
+    start_end_prompt = _inject_start_work_prompt(prompt_text, onboarding_required=needs_onboarding)
+    dynamic_context += start_end_prompt
+    context = dynamic_context + "\n--- SpecPilot Base Context ---\n" + context
 
     context = _truncate(context)
 

@@ -1,6 +1,6 @@
-# Codex-WikiGuard — HOME
+# Codex SpecPilot — HOME
 
-This is the WikiGuard project root.
+This is the SpecPilot project root.
 
 ## Scope
 

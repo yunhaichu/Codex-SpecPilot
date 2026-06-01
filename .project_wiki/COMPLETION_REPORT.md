@@ -103,3 +103,21 @@ _No completion report yet._
 - Verdict: done
 - Reason: The assistant states the task is complete and that no files were modified.
 - Next action: None (task complete)
+
+## Stop Hook Done Record
+- Timestamp: 2026-05-31T23:21:02.647352+00:00
+- Verdict: done
+- Reason: Human approval was obtained for the otherwise prohibited .codex/hooks.json change; worker preserved the change, made no new commit, and verification passes: JSON validation, Python compile, and 26/26 smoke tests.
+- Next action: None (task complete)
+
+## Stop Hook Done Record
+- Timestamp: 2026-05-31T23:34:49.121871+00:00
+- Verdict: done
+- Reason: Acceptance criteria met: worker ran clean temporary-copy unattended e2e on current HEAD, verified real apply_patch flow, auto-continue blocks, completion report, final tests, and did not edit judge-system files.
+- Next action: None (task complete)
+
+## Stop Hook Done Record
+- Timestamp: 2026-05-31T23:41:20.388143+00:00
+- Verdict: done
+- Reason: Acceptance criteria met; latest context and assistant report confirm clean unattended e2e, real apply_patch flow, auto-continue blocks, completion report, final tests, and no further feature work needed.
+- Next action: None (task complete)
