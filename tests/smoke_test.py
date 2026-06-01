@@ -707,6 +707,7 @@ def test_project_injector_bootstrap_and_onboarding():
         result = injector.bootstrap_project(existing_dir)
         test("bootstrap writes hooks and codex config",
              "hooks/stop_judge.py" in result.get("written", [])
+             and "hooks/project_injector.py" in result.get("written", [])
              and ".codex/hooks.json" in result.get("written", []),
              result)
         test("bootstrap writes onboarding placeholder spec",

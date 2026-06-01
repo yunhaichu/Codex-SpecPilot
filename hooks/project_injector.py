@@ -24,6 +24,7 @@ HOOK_FILES = (
     "codex_client.py",
     "permission_policy.py",
     "pre_tool_guard.py",
+    "project_injector.py",
     "project_paths.py",
     "spec_steward.py",
     "stop_judge.py",
