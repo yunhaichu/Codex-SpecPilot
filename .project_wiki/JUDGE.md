@@ -2,16 +2,25 @@
 
 ## Latest Judgment
 
-**Timestamp**: 2026-06-01T10:53:42.832168+00:00
+**Timestamp**: 2026-06-02T09:26:23.864157+00:00
 
 **Verdict**: done
 
-**Reason**: Experience evaluation passed: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.
+**Reason**: Experience evaluation passed: Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.
 
 ## Assistant Message (last turn)
 
 ```
-Preparing v2.1 release. Direct validation evidence: `python3 tests/smoke_test.py` from repo root exited 0, reported Passed: 125, Failed: 0, and had no FAIL lines in /tmp/specpilot-smoke-v21.log. py_compile passed for stop_judge/spec_steward/user_prompt_submit/project_injector/permission_policy/install_specpilot/smoke_test. The minimal supervised project `python3 run_tests.py` passed 2/2. A done-state latest_context wording fix was added and covered by smoke tests. All TASK-001 through TASK-011 items are checked. If no other valid user-facing issue remains, allow final_done for release v2.1.
+完成开发了。
+
+当前状态：`done`，TASK-012 / TASK-013 已完成，体验测评也通过。验证结果是：
+
+- 语法检查通过
+- 烟测 `132/132` 通过
+- 最小示例项目 `2/2` 通过
+- `git diff --check` 通过
+
+但这次改动还只是本地完成，尚未提交、推送或发布新版。
 ```
 
 ## Next Action
@@ -24,7 +33,11 @@ Preparing v2.1 release. Direct validation evidence: `python3 tests/smoke_test.py
 
 - Status: no obvious user-facing issues found
 - Decision: final_done
-- Reason: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.
+- Reason: Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.
+
+### Filtered Suggestions
+
+- Local changes are not committed, pushed, or released yet, but the spec says remote submit/release is local-only/default optional unless explicitly requested, so this is not a blocker.
 
 ## History
 

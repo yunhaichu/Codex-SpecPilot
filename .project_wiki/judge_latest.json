@@ -1,7 +1,7 @@
 {
   "last_verdict": "done",
-  "timestamp": "2026-06-01T10:53:42.831857+00:00",
-  "reason": "Experience evaluation passed: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.",
+  "timestamp": "2026-06-02T09:26:23.862937+00:00",
+  "reason": "Experience evaluation passed: Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.",
   "auto_continue": false,
   "next_action": "",
   "loop_count": 0,
@@ -9,9 +9,11 @@
   "experience_evaluation": {
     "decision": "final_done",
     "status": "no obvious user-facing issues found",
-    "reason": "Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.",
+    "reason": "Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.",
     "findings": [],
-    "filtered_findings": [],
+    "filtered_findings": [
+      "Local changes are not committed, pushed, or released yet, but the spec says remote submit/release is local-only/default optional unless explicitly requested, so this is not a blocker."
+    ],
     "change_request": ""
   }
 }

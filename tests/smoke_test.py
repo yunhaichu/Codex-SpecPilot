@@ -542,11 +542,19 @@ def test_stop_prompt_keeps_development_plan_context():
     with tempfile.TemporaryDirectory() as td:
         stop.WIKI_DIR = td
         long_background = "Background detail.\n" * 250
+        long_tasks = "".join(
+            "* TASK-%03d: Filler stage work\n"
+            "    * Acceptance: filler stage %03d is tracked.\n"
+            % (idx, idx)
+            for idx in range(3, 90)
+        )
         project_spec = (
             "# PROJECT_SPEC\n\n"
             "0. Project Mode\nsupervised_project_development\n\n"
             "1. Project Goal\nBuild a local iOS app.\n\n"
             "2. Background\n%s\n\n"
+            "3. User Requirements\n* Users can operate the app locally.\n\n"
+            "4. Non-Goals\n* No cloud default.\n\n"
             "5. Allowed Scope\n* App files.\n\n"
             "6. Protected Scope\n* .project_wiki/PROJECT_SPEC.md\n* .codex/hooks.json\n* hooks/*.py\n\n"
             "7. Development Plan\n"
@@ -554,14 +562,19 @@ def test_stop_prompt_keeps_development_plan_context():
             "    * Acceptance: simulator launches the home screen.\n"
             "* TASK-002: Build local dossier models\n"
             "    * Acceptance: model files exist and compile.\n\n"
+            "%s"
+            "* TASK-099: Verify final import boundary\n"
+            "    * Acceptance: late tasks remain visible to the judge.\n\n"
             "8. Acceptance Criteria\n"
             "* Development Plan 中所有任务均完成。\n"
             "* App can build and run.\n\n"
             "9. Stop Conditions\n"
             "* Needs protected scope change.\n\n"
+            "## GitHub Sync Policy\n"
+            "* Mode: local-only.\n\n"
             "10. Submission Requirements\n"
-            "* Generate completion report.\n"
-        ) % long_background
+            "* Generate completion report with tail sentinel.\n"
+        ) % (long_background, long_tasks)
         for name, content in {
             "PROJECT_SPEC.md": project_spec,
             "latest_context.md": "# Latest\n",
@@ -592,14 +605,24 @@ def test_stop_prompt_keeps_development_plan_context():
             })
             prompt = captured.get("prompt", "")
             test("long spec prompt includes later task", "TASK-002" in prompt, prompt[:1000])
+            test("long spec prompt keeps tail task",
+                 "TASK-099" in prompt and "late tasks remain visible" in prompt,
+                 prompt[-2000:])
             test("long spec prompt includes acceptance criteria",
                  "Acceptance Criteria" in prompt, prompt[:1000])
+            test("long spec prompt includes submission requirements",
+                 "Submission Requirements" in prompt and "tail sentinel" in prompt,
+                 prompt[-2000:])
             test("stop prompt distinguishes task done from project done",
                  "one TASK is done" in prompt and "whole PROJECT_SPEC" in prompt,
                  prompt[:1000])
             test("stop prompt includes GitHub sync boundary",
                  "GitHub sync" in prompt and "local-only" in prompt,
                  prompt[:1000])
+            test("stop prompt prefers blocker self-recovery before human review",
+                 "stage goal" in prompt and "re-evaluate" in prompt
+                 and "real user decision" in prompt,
+                 prompt[:2000])
             test("long spec continue still blocks next loop",
                  result.get("decision") == "block", result)
         finally:
@@ -1253,6 +1276,48 @@ def test_spec_steward_controlled_update_flow():
             steward.LATEST_CONTEXT_PATH = old_latest_path
 
 
+def test_spec_steward_long_project_spec_prompt_keeps_tail():
+    print("\n[Spec Steward long PROJECT_SPEC prompt]")
+    steward = _load_hook_module("spec_steward")
+    long_background = "Very long background detail.\n" * 3500
+    long_plan = "".join(
+        "- [ ] TASK-%03d: Long plan item\n"
+        "  - Acceptance: long plan item %03d remains tracked.\n"
+        % (idx, idx)
+        for idx in range(1, 130)
+    )
+    long_spec = (
+        "# PROJECT_SPEC\n\n"
+        "## 0. Project Mode\nsupervised_project_development\n\n"
+        "## 1. Project Goal\nBuild a long-plan project.\n\n"
+        "## 2. Background\n%s\n\n"
+        "## 3. User Requirements\n- Keep all confirmed requirements.\n\n"
+        "## 4. Non-Goals\n- No RAG.\n\n"
+        "## 5. Allowed Scope\n- app/\n\n"
+        "## 6. Protected Scope\n- .project_wiki/PROJECT_SPEC.md\n\n"
+        "## 7. Development Plan\n%s"
+        "- [ ] TASK-199: Late-stage acceptance sentinel\n"
+        "  - Acceptance: late-stage task is still visible.\n\n"
+        "## 8. Acceptance Criteria\n- Every task is complete.\n\n"
+        "## 9. Stop Conditions\n- Need a real user decision.\n\n"
+        "## GitHub Sync Policy\n- Mode: local-only.\n\n"
+        "## 10. Submission Requirements\n- Completion report keeps submission tail sentinel.\n"
+    ) % (long_background, long_plan)
+    prompt = steward.build_spec_update_prompt("Add a small confirmed task.", long_spec, "")
+    test("spec steward prompt marks compacted task book",
+         "PROJECT_SPEC compacted for prompt" in prompt,
+         prompt[:1000])
+    test("spec steward prompt keeps late Development Plan item",
+         "TASK-199" in prompt and "late-stage task is still visible" in prompt,
+         prompt[-3000:])
+    test("spec steward prompt keeps submission requirements tail",
+         "Submission Requirements" in prompt and "submission tail sentinel" in prompt,
+         prompt[-3000:])
+    test("spec steward prompt warns not to drop late task-book content",
+         "late Development Plan items" in prompt,
+         prompt[:2000])
+
+
 def test_readme_task006_role_boundaries():
     print("\n[README role boundaries]")
     readme = open(os.path.join(ROOT_DIR, "README.md"), encoding="utf-8").read()
@@ -1690,6 +1755,7 @@ def main():
     test_stop_onboarding_steward_writes_spec()
     test_stop_incomplete_project_spec_enters_onboarding()
     test_spec_steward_controlled_update_flow()
+    test_spec_steward_long_project_spec_prompt_keeps_tail()
     test_readme_task006_role_boundaries()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()

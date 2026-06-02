@@ -36,6 +36,18 @@ GitHub 策略，并在后续开发节点按任务书策略决定是否提交、�
 更新流程。开发、测评、合同更新、继续开发可以反复循环，直到体验测评找不到明显问题
 或值得继续开发的改进点后，再进入最终完成报告。
 
+当开发中途遇到实现、测试、规划或阶段推进问题时，SpecPilot 不应机械地把问题丢给
+用户。只要任务书、项目 Wiki、当前目标和阶段目标中已有足够事实，Hook 应推动 Codex
+先自行研究、修复、验证或调整执行计划。如果没有直接解法，应先判断当前阶段目标或
+Development Plan 是否存在问题，再通过受控任务合同更新或计划调整继续推进；只有确实
+需要用户取舍、凭据、外部环境动作、受保护范围授权或不可消除歧义时，才进入
+`human_review`。
+
+SpecPilot 还应支持长任务书。Hook、Spec Steward 和 onboarding 不应依赖把完整
+`PROJECT_SPEC.md` 无脑塞进一次提示；遇到长任务、长背景或大量阶段计划时，应使用
+紧凑摘要、关键章节抽取或分段保真方式，确保目标、范围、保护边界、Development Plan
+后段任务、验收标准、停止条件、GitHub 策略和提交要求不会因为篇幅限制丢失。
+
 ## 2. Background
 Codex 默认是一轮一轮被用户推动的交互工具。SpecPilot 的目标是让 Codex 在明确
 任务书约束下进入无人值守的连续工作模式，由 Hook 里的 AI 判断替代用户反复确认：
@@ -62,6 +74,13 @@ onboarding，避免 Codex Worker 在合同不完整时直接写业务代码。
 平台、复杂流程编排器或无限打磨机制；它只在完成前识别与目标用户、项目目标和验收
 价值直接相关的明显体验问题，并把这些问题通过受控 Spec Steward / Development Plan /
 Worker 流程转成可执行后续开发任务。
+
+开发中途卡点治理的目标是让 Hook 更像真实项目负责人：能基于已有事实继续推动问题
+解决，而不是把普通工程卡点升级成用户负担。只有当问题本质上需要用户决策、权限、
+凭据、范围变更或合同澄清时，才暂停自动推进。
+
+长任务书治理的目标是避免任务书一长就影响导入、判断或更新。SpecPilot 应优先保留
+任务合同中会影响判断的结构性事实，而不是简单按字符数截断全文。
 
 ## 3. User Requirements
 - 用户只输入一次 `开始工作` 后，系统应尽量自动推进到完成。
@@ -99,6 +118,11 @@ Worker 流程转成可执行后续开发任务。
 - 体验测评 Hook 不得把纯主观偏好、低价值润色、无限打磨、非目标用户场景、与项目目标不相关的问题转成新需求。
 - 有效体验测评发现必须进入受控 Spec Steward / Development Plan / Worker 流程，不能由普通 Codex Worker 绕过任务合同直接继续开发。
 - 开发完成、体验测评、任务合同更新、继续开发的循环可以反复进行；只有最后一次体验测评找不到明显问题或值得继续开发的改进点时，才进入最终完成报告。
+- 开发中途遇到实现、测试、依赖、规划或阶段推进问题时，Hook 应优先基于 `.project_wiki` 事实、当前项目目标、阶段目标和 Development Plan 给出自解或研究路径，而不是默认进入 `human_review`。
+- 如果没有直接解决思路，Hook 应先要求 Codex 重新审视当前阶段目标或 Development Plan 假设，必要时生成受控 `spec_update_required` / 计划更新请求，然后继续推动开发。
+- 只有问题需要真实用户取舍、凭据/secret、外部环境动作、受保护范围授权、目标范围确认或不可消除歧义时，才把问题交给用户。
+- Hook、Spec Steward 和 onboarding 必须支持长 `PROJECT_SPEC.md` / 长任务书导入，保留关键章节、后段 Development Plan 任务和提交要求，不得因为简单截断导致后续任务或验收标准丢失。
+- 用户不应被要求手动缩短、拆分或重写任务书来绕过 Hook 篇幅限制；必要的紧凑化或分段读取应由 SpecPilot 处理。
 
 ## 4. Non-Goals
 - 不做完整 GH 平台。
@@ -114,6 +138,8 @@ Worker 流程转成可执行后续开发任务。
 - 不做单独的用户研究平台或可用性实验平台。
 - 不把体验测评扩展成无限打磨、审美偏好收集或脱离项目目标的改进清单。
 - 不要求用户手动维护任务合同文件来完成需求变化。
+- 不把普通工程卡点、测试失败、规划不顺或阶段目标疑似不合理默认升级给用户处理。
+- 不要求用户手动压缩、拆分或重新导入长任务书。
 - 不单独配置模型。
 - 不写死 GPT、Qwen、API endpoint 或某个 profile。
 - 不用大量硬编码 denylist 构建权限引擎。
@@ -136,6 +162,13 @@ Worker 流程转成可执行后续开发任务。
 为实现使用者视角体验测评闭环，允许在上述范围内增加完成前测评 Hook、测评状态、受控 Spec Steward 入口、Development Plan 更新逻辑、测试和文档；不得引入多 Agent 平台、RAG、图数据库、外层调度器或复杂流程编排。
 
 为实现自动任务合同更新确认流，允许在上述范围内增加用户修改建议识别、确认语义处理、受控 Spec Steward / onboarding / spec update 写入、Development Plan 更新、README、INJECTION 和模板一致性维护逻辑；不得让普通 Codex Worker 绕过该受控流程直接改写任务合同。
+
+为实现开发中途卡点自解和阶段目标重规划，允许在上述范围内调整 Stop Hook 提示词、
+下一步动作生成、任务合同更新入口、README、INJECTION、模板和测试；不得引入外层
+调度器、多 Agent 平台、RAG 或复杂流程编排。
+
+为实现长任务书支持，允许在上述范围内增加任务书紧凑化、关键章节抽取、分段保真、
+提示构造和测试；不得引入复杂文档平台或要求用户手动维护额外任务书分片。
 
 ## 6. Protected Scope
 Codex Worker 不能修改判断体系和监督状态文件，除非用户明确要求开发 SpecPilot
@@ -239,6 +272,18 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
   - Acceptance: 用户提出修改建议时，Hook/Spec Steward 能识别并启动受控任务合同更新；信息足够时直接写入完整更新后的 `PROJECT_SPEC.md` 并更新 Development Plan；信息不足时只问最少澄清问题；用户对已总结变化回复 `同意` 或等价确认时，Spec Steward 可立即 apply；相关 INJECTION、模板和 README 与该流程保持一致；测试覆盖直接建议、信息不足、`同意` 确认、拒绝/含糊确认、Development Plan 更新、普通 Worker 不得绕过受控流程、GitHub policy 默认 local-only 且不保存 secret。
   - Notes: 保持受控写入边界；不引入 RAG、多 Agent 平台、图数据库、外层调度器、云默认或 credential 存储。
 
+- [x] TASK-012: 支持开发卡点自解和阶段目标重规划
+  - Goal: 让 Hook 在开发中途遇到实现、测试、依赖、规划或阶段推进问题时，优先基于已有 Wiki 事实和任务合同推动 Codex 自行研究、修复、验证或调整计划，而不是默认把问题交给用户。
+  - Scope: `hooks/stop_judge.py`, `hooks/spec_steward.py`, `tests/*`, `README.md`, `.project_wiki/INJECTION.md`, `.project_wiki/PROJECT_SPEC_TEMPLATE.md`, `.project_wiki/PROJECT_SPEC.md`
+  - Acceptance: Stop Hook 提示和测试明确要求普通工程卡点优先走 `continue` / `revise` 并给出可执行 next_action；无直接解法时先重审阶段目标或 Development Plan 假设，必要时进入受控 `spec_update_required`；只有真实用户取舍、secret、外部环境、保护范围、目标范围确认或不可消除歧义才进入 `human_review`。
+  - Notes: 保持轻量 AI 控制；不引入外层调度器、多 Agent、RAG、复杂流程编排或无限研究机制。
+
+- [x] TASK-013: 支持长任务书紧凑导入和关键章节保真
+  - Goal: 避免长 `PROJECT_SPEC.md` / 长任务书因为提示篇幅限制导致目标、范围、后段任务、验收标准或提交要求丢失。
+  - Scope: `hooks/stop_judge.py`, `hooks/spec_steward.py`, `tests/*`, `README.md`, `.project_wiki/INJECTION.md`, `.project_wiki/PROJECT_SPEC_TEMPLATE.md`, `.project_wiki/PROJECT_SPEC.md`
+  - Acceptance: Stop Hook 和 Spec Steward 构造提示时使用关键章节抽取与头尾保真，而不是简单全文截断；紧凑上下文必须保留 Project Goal、User Requirements、Non-Goals、Allowed Scope、Protected Scope、Development Plan、Acceptance Criteria、Stop Conditions、GitHub policy 和 Submission Requirements；测试覆盖长背景、长 Development Plan、后段任务和提交要求仍能进入判断提示。
+  - Notes: 不要求用户手动缩短或拆分任务书；不引入复杂文档管理、RAG 或外层调度器。
+
 ## 8. Acceptance Criteria
 - 用户只输入一次 `开始工作` 后，Hook 能持续推动 Codex 继续开发或纠偏。
 - Stop Hook 能基于 AI 输出可靠处理 `continue | revise | done | human_review`。
@@ -264,13 +309,17 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
 - 体验测评 Hook 必须过滤纯主观偏好、低价值润色、无限打磨、非目标用户场景和与项目目标不相关的问题，不得把它们转成新需求。
 - 有效体验测评发现必须通过受控 Spec Steward / Development Plan / Worker 流程转成后续任务，普通 Codex Worker 不得绕过任务合同直接开发。
 - 开发、体验测评、合同更新、继续开发可以循环；最后一次体验测评找不到明显问题或高价值改进时，才允许生成或更新 `.project_wiki/COMPLETION_REPORT.md`。
+- 开发中途遇到普通实现、测试、依赖、规划或阶段推进问题时，Stop Hook 必须优先给出基于已有事实的自解、研究、修复或验证 next_action，而不是默认进入 `human_review`。
+- 如果没有直接解决路径，Stop Hook 必须先推动 Codex 重审当前阶段目标或 Development Plan 假设，并在需要时进入受控 `spec_update_required` / 计划更新流程。
+- 只有真实用户取舍、凭据/secret、外部环境动作、受保护范围授权、目标范围确认或不可消除歧义，才允许把开发卡点升级为 `human_review`。
+- 长任务书必须能被 Stop Hook 和 Spec Steward 以紧凑或分段保真方式导入，且后段 Development Plan 任务、验收标准、停止条件、GitHub 策略和提交要求不能因为简单截断丢失。
 - 判断体系文件不能被普通 Codex Worker 修改。
 - Hook 保持轻量，不引入复杂规则引擎、RAG、多 Agent、外层调度器、完整 GitHub 平台、CI 管理器、release platform、issue tracker、复杂流程编排或无限打磨机制。
 - `codex exec` 使用当前默认模型，不写死模型、profile 或 endpoint。
 - macOS 和 Windows 的路径与启动方式都有测试覆盖。
 
 ## 9. Stop Conditions
-- AI 判断需求不清或需要用户决策时，进入 `human_review`。
+- AI 判断需求不清或需要用户决策时，进入 `human_review`；但普通工程卡点必须先尝试基于任务书、项目 Wiki、阶段目标和已有验证结果自解或重审阶段目标，不能直接把问题丢给用户。
 - 用户修改建议涉及任务合同但信息不足时，进入受控 Spec Steward / onboarding / spec update 澄清流程，只问最少必要问题。
 - 用户对拟议合同变化的确认含糊、冲突或无法判断是否等价于 `同意` 时，不得直接写入，必须请求最少确认或进入 `human_review`。
 - 任务合同更新请求与当前受保护范围、Non-Goals 或 GitHub/secret 安全政策冲突时，进入 `human_review` 或拒绝该变更，不得静默写入。
@@ -287,6 +336,7 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
 - 体验测评发现的问题是否应转为新需求存在歧义、与任务合同冲突或需要用户取舍时，进入 `spec_update_required` 或 `human_review`。
 - 体验测评发现只包含低价值、纯主观、非目标用户场景或与项目目标无关的建议时，不得转成新需求，应允许最终完成报告继续。
 - 体验测评循环反复提出低价值、主观、非目标场景或无法收敛的建议时，应过滤这些建议，并在达到循环限制时进入 `human_review`，不得无限打磨。
+- 长任务书导入或紧凑化无法保留必需章节、后段任务或提交要求时，不能假装判断完整；应进入受控修复或 `human_review`，不得基于残缺任务书宣告完成。
 
 ## 10. Submission Requirements
 - 受控 Spec Steward / onboarding / spec update 流程输出更新后的 `PROJECT_SPEC.md` 时，必须保留本文件的必需 heading，包括 `Project Mode`、`Project Goal`、`User Requirements`、`Non-Goals`、`Allowed Scope`、`Protected Scope`、`Development Plan`、`Acceptance Criteria`、`Stop Conditions`、GitHub 相关策略内容和 `Submission Requirements`。
@@ -299,6 +349,7 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
 - 完成真实试跑前，不得声称无人值守 LLM supervisor 已完全跑通。
 - 最终完成报告只能在最后一次体验测评找不到明显问题或值得继续开发的改进点后生成或更新。
 - 修改后至少运行不触发无关状态污染的基础验证。
+- 长任务书相关修改必须说明是否使用了紧凑/分段保真，以及后段任务和提交要求是否被验证保留。
 - 不得请求、写入或暴露 API key、token、private key、密码或其他 credential secret。
 - 不得新增 RAG、多 Agent 平台、图数据库、外层调度器、云默认或复杂流程编排。
 - 普通 Codex Worker 不得绕过受控流程改写 `PROJECT_SPEC.md`、GitHub policy 或相关 SpecPilot instruction/template 文件。

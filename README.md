@@ -21,6 +21,9 @@ It helps a user turn a rough idea into a structured task contract, then lets Cod
 - Block ordinary worker edits to judge-system files such as `PROJECT_SPEC.md`, Hook source, Hook config, and supervision state.
 - Ask the current Codex default model to judge whether work should continue, revise, finish, or stop for human review.
 - Automatically continue the Codex loop when the Stop Hook decides the next step is clear and allowed.
+- Treat ordinary implementation, test, dependency, or planning blockers as work to investigate and recover from before asking the user.
+- Re-check the current stage goal or Development Plan when there is no direct recovery path, then route real contract changes through Spec Steward.
+- Preserve key task-book sections when `.project_wiki/PROJECT_SPEC.md` is long, including late Development Plan items and submission requirements.
 - Pause development when the user changes project goals, scope, priorities, or acceptance criteria, then invoke the controlled task-contract update flow directly.
 - Run a user-perspective experience evaluation before final completion reporting.
 - Convert obvious high-value user-facing evaluation findings into controlled task-contract updates before development continues.
@@ -37,10 +40,11 @@ Codex SpecPilot stays intentionally small. It is not a full GitHub platform, CI 
 5. The user says `开始工作`.
 6. Codex works through the Development Plan.
 7. Hooks judge progress, direction, permissions, completion, and whether the loop should continue.
-8. If the user changes requirements, SpecPilot routes the suggestion or confirmation through Spec Steward; the user does not manually edit the task contract.
-9. When all acceptance criteria are met, Codex SpecPilot runs a user-perspective experience evaluation.
-10. If the evaluation finds obvious high-value user-facing issues, SpecPilot pauses for a controlled task-contract update.
-11. If no obvious issue remains, SpecPilot records the final completion result.
+8. If development hits an ordinary blocker, SpecPilot asks Codex to investigate, recover, validate, or revise the stage plan before asking the user.
+9. If the user changes requirements, SpecPilot routes the suggestion or confirmation through Spec Steward; the user does not manually edit the task contract.
+10. When all acceptance criteria are met, Codex SpecPilot runs a user-perspective experience evaluation.
+11. If the evaluation finds obvious high-value user-facing issues, SpecPilot pauses for a controlled task-contract update.
+12. If no obvious issue remains, SpecPilot records the final completion result.
 
 ## Role Boundaries
 
@@ -49,7 +53,11 @@ Codex SpecPilot stays intentionally small. It is not a full GitHub platform, CI 
 - Spec Steward: the controlled writer for `.project_wiki/PROJECT_SPEC.md`; it applies clear suggestions or explicit approvals such as `同意`, and asks only when information is insufficient.
 - Planner: the Development Plan inside `PROJECT_SPEC.md`; it converts the confirmed contract into ordered `TASK-*` work.
 - Codex Worker: implements the current Development Plan task and must not rewrite the task contract or judge-system files.
-- Stop Hook: judges each turn and may return `continue`, `revise`, `done`, `human_review`, or `spec_update_required`; goal changes pause Worker development while Spec Steward updates the contract.
+- Stop Hook: judges each turn and may return `continue`, `revise`, `done`, `human_review`, or `spec_update_required`; ordinary blockers should become concrete recovery or stage-replan actions, while goal changes pause Worker development so Spec Steward can update the contract.
+
+## Long Task Books
+
+SpecPilot does not require the user to shorten a long `.project_wiki/PROJECT_SPEC.md`. Hooks build compact prompt context from the key sections and keep both the beginning and end of long sections, so late Development Plan tasks, GitHub policy, stop conditions, and submission requirements remain visible.
 
 ## macOS Install
 
@@ -104,6 +112,9 @@ Codex SpecPilot 是一个公开的 MIT 许可证项目，用来让 Codex 按清�
 - 阻止普通 Worker 修改判断体系文件，例如 `PROJECT_SPEC.md`、Hook 源码、Hook 配置和监督状态。
 - 使用当前 Codex 默认模型判断是否继续、纠偏、完成或进入人工确认。
 - 当 Stop Hook 判断下一步明确且允许时，自动推动 Codex 继续工作。
+- 遇到普通实现、测试、依赖或规划卡点时，先推动 Codex 调查、修复、验证或调整阶段计划，而不是直接把问题交给用户。
+- 如果没有直接解法，先重审当前阶段目标或 Development Plan；确实需要改任务合同时，再走 Spec Steward。
+- 长任务书会以关键章节和头尾保真的方式导入 Hook 判断，避免后段任务或提交要求被截断。
 - 当用户在开发中修改目标、范围、优先级或验收标准时，暂停开发并直接调用受控任务合同更新流程。
 - 最终完成报告前，先执行使用者视角体验测评。
 - 将明显且高价值的用户体验问题转成受控任务合同更新，再继续开发。
@@ -120,10 +131,11 @@ Codex SpecPilot 保持轻量。它不是完整 GitHub 平台、CI 系统、发�
 5. 用户输入 `开始工作`。
 6. Codex 按 Development Plan 开发。
 7. Hook 判断进度、方向、权限、完成状态，以及是否继续循环。
-8. 如果用户调整需求，SpecPilot 将修改建议或确认交给 Spec Steward；用户不需要手动编辑任务书。
-9. 所有验收条件满足后，Codex SpecPilot 先执行使用者视角体验测评。
-10. 如果测评发现明显且高价值的用户问题，SpecPilot 暂停并进入受控任务合同更新。
-11. 如果没有明显剩余问题，SpecPilot 记录最终完成结果。
+8. 如果开发遇到普通卡点，SpecPilot 先要求 Codex 调查、自解、验证或重审阶段计划。
+9. 如果用户调整需求，SpecPilot 将修改建议或确认交给 Spec Steward；用户不需要手动编辑任务书。
+10. 所有验收条件满足后，Codex SpecPilot 先执行使用者视角体验测评。
+11. 如果测评发现明显且高价值的用户问题，SpecPilot 暂停并进入受控任务合同更新。
+12. 如果没有明显剩余问题，SpecPilot 记录最终完成结果。
 
 ## 角色分工
 
@@ -132,7 +144,11 @@ Codex SpecPilot 保持轻量。它不是完整 GitHub 平台、CI 系统、发�
 - Spec Steward：`.project_wiki/PROJECT_SPEC.md` 的受控写入者；对清晰建议或 `同意` 这类明确确认可直接应用，信息不足时才提问。
 - Planner：`PROJECT_SPEC.md` 里的 Development Plan；把已确认合同拆成有顺序的 `TASK-*`。
 - Codex Worker：只实现当前 Development Plan 任务，不改写任务合同或判断体系文件。
-- Stop Hook：每轮判断 `continue`、`revise`、`done`、`human_review` 或 `spec_update_required`；如果用户改目标，先暂停 Worker，同时让 Spec Steward 更新合同。
+- Stop Hook：每轮判断 `continue`、`revise`、`done`、`human_review` 或 `spec_update_required`；普通卡点应转成明确恢复或阶段重规划动作，用户改目标时才暂停 Worker 并让 Spec Steward 更新合同。
+
+## 长任务书
+
+SpecPilot 不要求用户手动缩短 `.project_wiki/PROJECT_SPEC.md`。Hook 会从关键章节构造紧凑上下文，并保留长章节的开头和结尾，确保后段 Development Plan、GitHub 策略、停止条件和提交要求仍能进入判断。
 
 ## macOS 安装
 

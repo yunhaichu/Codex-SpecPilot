@@ -281,3 +281,43 @@ _No completion report yet._
 - Status: no obvious user-facing issues found
 - Decision: final_done
 - Reason: Available validation evidence shows the v2.1 release path passed smoke tests, compilation checks, and minimal supervised project tests, and the previously identified done-state wording issue was fixed and covered. No remaining obvious target-user-facing blocker is evident from the supplied context.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-01T10:55:16.553566+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Release evidence indicates the target user path is complete: v2.1 was committed, pushed, tagged, published, smoke tested, compiled, and the supervised minimal project tests plus final experience evaluation passed. No obvious user-facing blocker is visible from the supplied context.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Release evidence indicates the target user path is complete: v2.1 was committed, pushed, tagged, published, smoke tested, compiled, and the supervised minimal project tests plus final experience evaluation passed. No obvious user-facing blocker is visible from the supplied context.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-02T07:21:41.756543+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: The supplied evidence covers the target user path: implementation completed the relevant plan items, Stop Hook behavior and long spec handling were added, documentation/templates updated, compile/smoke/minimal supervised tests passed, and the latest judge context already reports experience evaluation passed. No obvious practical user-facing blocker is visible from the available evidence.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: The supplied evidence covers the target user path: implementation completed the relevant plan items, Stop Hook behavior and long spec handling were added, documentation/templates updated, compile/smoke/minimal supervised tests passed, and the latest judge context already reports experience evaluation passed. No obvious practical user-facing blocker is visible from the available evidence.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-02T09:26:23.865872+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Available evidence indicates the target user path is covered: the remaining SpecPilot tasks are marked complete, Stop Hook/self-resolution and long-spec handling were implemented, docs/templates were updated, and relevant validation passed. No practical user-facing blocker is visible from the provided context.
+
+### Filtered Suggestions
+
+- Local changes are not committed, pushed, or released yet, but the spec says remote submit/release is local-only/default optional unless explicitly requested, so this is not a blocker.

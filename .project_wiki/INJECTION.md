@@ -21,6 +21,25 @@ When working under SpecPilot:
    - what should happen next.
 5. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
 
+## Blocker Self-Recovery Rule
+When development hits an implementation, test, dependency, planning, or stage
+progress problem, do not default to handing the problem to the user.
+
+Use the existing `.project_wiki` facts, PROJECT_SPEC, latest context, current
+goal, stage goal, validation output, and changed files to choose the next
+recovery step. Prefer one of these outcomes:
+
+- continue with a concrete investigation, fix, or validation step;
+- revise the implementation approach;
+- re-check whether the current stage goal or Development Plan assumption is
+  wrong, then propose a controlled `spec_update_required` change if the task
+  contract needs to move.
+
+Use `human_review` only when the blocker truly needs user judgment, secrets or
+credentials, external environment action, protected-scope authorization, a
+scope choice, or an ambiguity Codex cannot resolve from the task book and wiki
+facts.
+
 ## Goal Change Rule
 Users may change project goals during development. When the current user prompt
 changes the project goal, scope, priority, acceptance criteria, or Development
@@ -71,6 +90,15 @@ credentials. If credentials are unavailable or a push/tag/release/repository
 creation requires human confirmation, fail safe to `human_review` instead of
 pretending the sync succeeded.
 
+## Long Task Book Rule
+`PROJECT_SPEC.md` may be long. Do not ask the user to manually shorten,
+split, or rewrite the task book to fit a Hook prompt.
+
+Hooks should use compact key-section context or section head/tail preservation
+so Project Goal, User Requirements, Non-Goals, Allowed Scope, Protected Scope,
+Development Plan, Acceptance Criteria, Stop Conditions, GitHub policy, and
+Submission Requirements remain visible, including late Development Plan tasks.
+
 ## Start Work Rule
 When the user says `开始工作`:
 
@@ -78,7 +106,9 @@ When the user says `开始工作`:
 2. Start the first incomplete Development Plan item.
 3. Do not wait for the user between normal development steps.
 4. Make progress in small, verifiable steps.
-5. Stop only when the task is done, blocked by environment, or needs real user judgment.
+5. If blocked, first investigate, revise, validate, or re-check the stage plan
+   using task-book and wiki facts.
+6. Stop only when the task is done, blocked by environment, or needs real user judgment.
 
 ## End Work Rule
 When all Acceptance Criteria are satisfied:

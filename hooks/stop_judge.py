@@ -576,30 +576,13 @@ def _github_policy_block_reason(project_spec, next_action):
     return ""
 
 
-def _compact_project_spec_for_stop(project_spec, limit=6000):
+def _compact_project_spec_for_stop(project_spec, limit=12000):
     """Keep Stop context focused on the task contract, not the whole document."""
-    if not project_spec:
-        return "(no PROJECT_SPEC.md)"
-
-    pieces = []
-    for title, start, ends in (
-        ("Project Mode", "0. Project Mode", ("1. Project Goal",)),
-        ("Project Goal", "1. Project Goal", ("2. Background",)),
-        ("Development Plan", "7. Development Plan", ("8. Acceptance Criteria",)),
-        ("Acceptance Criteria", "8. Acceptance Criteria", ("9. Stop Conditions",)),
-        ("Stop Conditions", "9. Stop Conditions", ("10. Submission Requirements",)),
-    ):
-        section = _slice_section(project_spec, start, ends)
-        if section:
-            pieces.append("## %s\n%s" % (title, section))
-
-    if not pieces:
-        return project_spec[:limit]
-
-    compact = "\n\n".join(pieces)
-    if len(compact) > limit:
-        return compact[:limit] + "\n[PROJECT_SPEC compact context truncated]"
-    return compact
+    return spec_steward.compact_project_spec_for_prompt(
+        project_spec,
+        limit=limit,
+        force_sections=True,
+    )
 
 
 def _is_permission_block(verdict, next_action, project_spec):
@@ -761,6 +744,11 @@ def _handle_spec_update_required_stop(assistant_msg, history, latest_ctx, reason
 
 
 def _build_onboarding_prompt(project_spec, onboarding_doc, latest_ctx, assistant_msg):
+    project_spec_context = spec_steward.compact_project_spec_for_prompt(
+        project_spec,
+        limit=5000,
+        force_sections=True,
+    )
     return (
         "You are Codex SpecPilot Onboarding Steward. Return ONLY JSON.\n"
         "The project has no complete task contract yet. Your job is to decide "
@@ -794,7 +782,7 @@ def _build_onboarding_prompt(project_spec, onboarding_doc, latest_ctx, assistant
         "LATEST_CONTEXT:\n```\n%s\n```\n"
         "LAST_ASSISTANT_MESSAGE:\n```\n%s\n```\n"
         % (
-            project_spec[:3000],
+            project_spec_context,
             onboarding_doc[:3000],
             latest_ctx[:1000],
             assistant_msg[:4000],
@@ -883,6 +871,11 @@ def _handle_onboarding_stop(assistant_msg, history, project_spec, latest_ctx):
 
 
 def _build_experience_evaluation_prompt(project_spec, latest_ctx, assistant_msg, done_reason):
+    project_spec_context = spec_steward.compact_project_spec_for_prompt(
+        project_spec,
+        limit=9000,
+        force_sections=True,
+    )
     return (
         "You are Codex SpecPilot Experience Evaluation Hook. Return ONLY JSON.\n"
         "The Stop Judge believes the project is done. Before final completion, "
@@ -916,7 +909,7 @@ def _build_experience_evaluation_prompt(project_spec, latest_ctx, assistant_msg,
         "STOP_JUDGE_DONE_REASON:\n```\n%s\n```\n"
         "LAST_ASSISTANT_MESSAGE:\n```\n%s\n```\n"
         % (
-            project_spec[:6000],
+            project_spec_context,
             latest_ctx[:1200] if latest_ctx else "(no latest_context.md)",
             done_reason[:1000],
             assistant_msg[:4000],
@@ -1145,7 +1138,17 @@ def stop_judge(turn_payload):
         "or advanced the project plan; set it false only when the loop is repeating "
         "without useful progress. "
         "pass is only for a no-op reply; continue/revise when work should proceed; "
-        "human_review if unsafe or unclear. "
+        "ordinary implementation, test, dependency, planning, or stage-goal "
+        "blockers should not become human_review by default. Use PROJECT_SPEC, "
+        "wiki facts, latest context, current goal, and stage goal to choose "
+        "continue or revise with a concrete investigation, recovery, fix, or "
+        "validation next_action. If there is no direct solution path, first "
+        "re-evaluate whether the current stage goal or Development Plan assumption "
+        "is flawed, then set next_action to revise the plan or use "
+        "spec_update_required when the task contract must change. Use "
+        "human_review only for a real user decision, secrets or credentials, "
+        "external environment action, protected-scope authorization, scope choice, "
+        "unsafe work, or irreducible ambiguity. "
         "GitHub sync, push, tag, checkpoint, release marker, or remote operations "
         "must follow PROJECT_SPEC GitHub policy. If policy is local-only or missing, "
         "do not request remote GitHub actions. If policy allows sync and the current "

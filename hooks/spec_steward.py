@@ -35,6 +35,19 @@ REQUIRED_SPEC_TERMS = (
     "Submission Requirements",
     "GitHub",
 )
+PROJECT_SPEC_PROMPT_SECTIONS = (
+    ("Project Mode", "0. Project Mode", ("1. Project Goal",), 0.4),
+    ("Project Goal", "1. Project Goal", ("2. Background",), 1.1),
+    ("User Requirements", "3. User Requirements", ("4. Non-Goals",), 1.4),
+    ("Non-Goals", "4. Non-Goals", ("5. Allowed Scope",), 0.8),
+    ("Allowed Scope", "5. Allowed Scope", ("6. Protected Scope",), 0.8),
+    ("Protected Scope", "6. Protected Scope", ("7. Development Plan",), 1.0),
+    ("Development Plan", "7. Development Plan", ("8. Acceptance Criteria",), 3.6),
+    ("Acceptance Criteria", "8. Acceptance Criteria", ("9. Stop Conditions",), 1.4),
+    ("Stop Conditions", "9. Stop Conditions", ("GitHub Sync Policy", "10. Submission Requirements"), 1.2),
+    ("GitHub Sync Policy", "GitHub Sync Policy", ("10. Submission Requirements",), 1.0),
+    ("Submission Requirements", "10. Submission Requirements", (), 1.2),
+)
 CONFIRMATION_TERMS = {
     "同意",
     "确认",
@@ -163,6 +176,62 @@ def _parse_llm_response(content):
         return None
 
 
+def _slice_project_spec_section(text, start_term, end_terms):
+    lower = text.lower()
+    start = lower.find(start_term.lower())
+    if start < 0:
+        return ""
+    end = len(text)
+    for term in end_terms:
+        idx = lower.find(term.lower(), start + len(start_term))
+        if idx >= 0 and idx < end:
+            end = idx
+    return text[start:end].strip()
+
+
+def _clip_for_prompt(text, limit):
+    if len(text) <= limit:
+        return text
+    marker = "\n[...middle omitted to preserve prompt budget...]\n"
+    if limit <= len(marker) + 120:
+        return text[:limit].rstrip() + "\n[...truncated...]"
+    head = max(80, (limit - len(marker)) // 2)
+    tail = max(80, limit - len(marker) - head)
+    return text[:head].rstrip() + marker + text[-tail:].lstrip()
+
+
+def compact_project_spec_for_prompt(project_spec, limit=MAX_PROJECT_SPEC_PROMPT_CHARS,
+                                    force_sections=False):
+    """Return PROJECT_SPEC context that preserves key sections and late tasks."""
+    if not project_spec:
+        return "(no PROJECT_SPEC.md)"
+    if not force_sections and len(project_spec) <= limit:
+        return project_spec
+
+    sections = []
+    for title, start, ends, weight in PROJECT_SPEC_PROMPT_SECTIONS:
+        section = _slice_project_spec_section(project_spec, start, ends)
+        if section:
+            sections.append((title, section, weight))
+
+    if not sections:
+        return _clip_for_prompt(project_spec, limit)
+
+    total_weight = sum(weight for _, _, weight in sections) or 1.0
+    budget = max(1000, limit - 500)
+    pieces = [
+        "[PROJECT_SPEC compacted for prompt: key sections preserved with head/tail clips.]"
+    ]
+    for title, section, weight in sections:
+        section_limit = max(280, int(budget * weight / total_weight) - len(title) - 8)
+        pieces.append("## %s\n%s" % (title, _clip_for_prompt(section, section_limit)))
+
+    compact = "\n\n".join(pieces)
+    if len(compact) > limit:
+        return _clip_for_prompt(compact, limit)
+    return compact
+
+
 def validate_project_spec(text):
     """Return missing required terms for a proposed PROJECT_SPEC."""
     missing = []
@@ -180,6 +249,10 @@ def validate_project_spec(text):
 
 
 def build_spec_update_prompt(change_request, current_spec, latest_context=""):
+    current_spec_context = compact_project_spec_for_prompt(
+        current_spec,
+        limit=MAX_PROJECT_SPEC_PROMPT_CHARS,
+    )
     return (
         "You are Codex SpecPilot Spec Steward. Return ONLY JSON.\n"
         "Your job is to update the task contract, not to write project code.\n"
@@ -201,6 +274,9 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "- Never tell the user to manually edit PROJECT_SPEC.md or task-book files.\n"
         "- Preserve judge-system protected scope unless the user explicitly changes SpecPilot itself.\n"
         "- Preserve or add GitHub sync policy. If upload/sync is not confirmed, use local-only.\n"
+        "- If CURRENT PROJECT_SPEC is compacted for prompt length, preserve the "
+        "visible required sections, late Development Plan items, and Submission "
+        "Requirements; do not drop them because they appear late in the task book.\n"
         "- Never request, write, or expose API keys, tokens, or secrets.\n"
         "- Update Development Plan so remaining work is clear; mark obsolete work in Notes if needed.\n"
         "- Do not add RAG, multi-agent platforms, graph memory, external schedulers, or cloud defaults.\n"
@@ -210,7 +286,7 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "LATEST CONTEXT:\n```\n%s\n```\n\n"
         "USER CHANGE REQUEST:\n```\n%s\n```\n"
         % (
-            current_spec[:MAX_PROJECT_SPEC_PROMPT_CHARS],
+            current_spec_context,
             latest_context[:MAX_LATEST_CONTEXT_PROMPT_CHARS],
             change_request[:MAX_CHANGE_REQUEST_PROMPT_CHARS],
         )
