@@ -1,5 +1,15 @@
 # Project Specification Template
 
+## Active Mission Snapshot
+写清楚当前开发阶段的目标锚点。长任务书必须优先保留本节。
+- Current Goal:
+- Current Phase:
+- Current TASK Range:
+- Current Acceptance Focus:
+- Current Non-Goals:
+- Current Release / GitHub Target:
+- Context Priority: Active Mission Snapshot -> current phase -> current TASK -> acceptance criteria -> historical summaries/evidence.
+
 ## 0. Project Mode
 必须选择一个：
 - `specpilot_self_development`
@@ -49,7 +59,10 @@
 - 如果用户拒绝已总结的任务合同变化，或确认语义含糊，Spec Steward 不得写入，只能请求最少确认或新的修改建议。
 - 开发遇到普通实现、测试、依赖或规划卡点时，必须先基于任务书和项目 Wiki 自行调查、修复、验证或重审阶段目标，不得默认把问题丢给用户。
 - 如果没有直接解法，必须先判断当前阶段目标或 Development Plan 是否需要调整；需要改任务合同时，进入受控 `spec_update_required`。
-- 长任务书必须通过关键章节紧凑导入或头尾保真方式进入 Hook 判断，后段 Development Plan、验收标准和提交要求不得因简单截断丢失。
+- 长任务书必须优先保留 Active Mission Snapshot，并通过关键章节紧凑导入或头尾保真方式进入 Hook 判断，后段 Development Plan、GitHub 策略、停止条件、验收标准和提交要求不得因简单截断丢失。
+- 历史摘要、已完成阶段或旧报告与 Active Mission Snapshot 冲突时，以当前目标锚点为准，并触发纠偏、证据对账或受控任务合同更新。
+- 报告证据显示任务完成但 Development Plan 仍显示 pending 时，必须做任务证据对账或受控任务合同修复。
+- 状态枚举必须归一化处理，等价状态不得导致任务完成证据和任务书状态冲突。
 - 完成前必须经过使用者视角体验测评。
 - 最后一次体验测评找不到明显问题或高价值改进后，才生成 COMPLETION_REPORT.md。
 

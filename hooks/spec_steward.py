@@ -6,6 +6,7 @@ mid-run user goal changes into an updated task contract.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from codex_client import call_codex_default
 from project_paths import wiki_dir
 from secret_scan import find_secret_material
+from mission_snapshot import build_priority_context
 
 WIKI_DIR = wiki_dir()
 PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
@@ -36,6 +38,7 @@ REQUIRED_SPEC_TERMS = (
     "GitHub",
 )
 PROJECT_SPEC_PROMPT_SECTIONS = (
+    ("Active Mission Snapshot", "Active Mission Snapshot", ("Project Mode", "0. Project Mode", "1. Project Goal"), 2.4),
     ("Project Mode", "0. Project Mode", ("1. Project Goal",), 0.4),
     ("Project Goal", "1. Project Goal", ("2. Background",), 1.1),
     ("User Requirements", "3. User Requirements", ("4. Non-Goals",), 1.4),
@@ -227,9 +230,65 @@ def compact_project_spec_for_prompt(project_spec, limit=MAX_PROJECT_SPEC_PROMPT_
         pieces.append("## %s\n%s" % (title, _clip_for_prompt(section, section_limit)))
 
     compact = "\n\n".join(pieces)
+    compact = build_priority_context(project_spec, compact, limit)
     if len(compact) > limit:
         return _clip_for_prompt(compact, limit)
     return compact
+
+
+def _find_markdown_section_bounds(text, heading_title):
+    pattern = re.compile(
+        r"(?im)^##+\s+(?:\d+\.\s*)?%s\s*$" % re.escape(heading_title)
+    )
+    match = pattern.search(text or "")
+    if not match:
+        return None
+    next_match = re.search(r"(?m)^##+\s+\S.*$", text[match.end():])
+    end = len(text)
+    if next_match:
+        end = match.end() + next_match.start()
+    return match.start(), end
+
+
+def replace_project_spec_section(project_spec, heading_title, replacement_section):
+    """Replace one markdown section by heading title without rewriting the file."""
+    bounds = _find_markdown_section_bounds(project_spec, heading_title)
+    if not bounds:
+        return project_spec
+    start, end = bounds
+    replacement = replacement_section.strip() + "\n\n"
+    return project_spec[:start] + replacement + project_spec[end:].lstrip("\n")
+
+
+def append_to_project_spec_section(project_spec, heading_title, addition):
+    """Append content to one markdown section while preserving the rest."""
+    bounds = _find_markdown_section_bounds(project_spec, heading_title)
+    if not bounds:
+        return project_spec
+    start, end = bounds
+    section = project_spec[start:end].rstrip()
+    patched = section + "\n" + addition.strip() + "\n\n"
+    return project_spec[:start] + patched + project_spec[end:].lstrip("\n")
+
+
+def apply_project_spec_section_patch(project_spec, patches):
+    """Apply deterministic section-level patches to PROJECT_SPEC content.
+
+    patches: [{"op": "replace"|"append", "heading": "Development Plan",
+               "content": "..."}]
+    """
+    updated = project_spec
+    for patch in patches or []:
+        op = patch.get("op", "")
+        heading = patch.get("heading", "")
+        content = patch.get("content", "")
+        if not heading or not content:
+            continue
+        if op == "replace":
+            updated = replace_project_spec_section(updated, heading, content)
+        elif op == "append":
+            updated = append_to_project_spec_section(updated, heading, content)
+    return updated
 
 
 def validate_project_spec(text):

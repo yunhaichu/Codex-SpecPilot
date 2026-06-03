@@ -350,6 +350,9 @@ def test_stop_auto_continue_and_done_helpers():
                  and "systemMessage" in missing_action,
                  (data, loop, missing_action))
 
+            with open(os.path.join(td, "PROJECT_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(_complete_project_spec("- [x] TASK-001: do work"))
+
             responses = [
                 {
                     "verdict": "done",
@@ -1318,6 +1321,215 @@ def test_spec_steward_long_project_spec_prompt_keeps_tail():
          prompt[:2000])
 
 
+def test_active_mission_snapshot_goal_drift_and_context_budget():
+    print("\n[Active Mission Snapshot]")
+    mission = _load_hook_module("mission_snapshot")
+    user_prompt = _load_hook_module("user_prompt_submit")
+    stop = _load_hook_module("stop_judge")
+
+    snapshot_spec = (
+        "# PROJECT_SPEC\n\n"
+        "## Active Mission Snapshot\n"
+        "- Current Goal: Stabilize autonomous contract governance.\n"
+        "- Current TASK Range: TASK-014 through TASK-023\n"
+        "- Current Release Target: v2.6\n"
+        "- Context Priority: Active Mission Snapshot -> current TASK -> acceptance.\n\n"
+        "## 0. Project Mode\nspecpilot_self_development\n\n"
+        "## 1. Project Goal\nBuild SpecPilot.\n\n"
+        "## 2. Background\n%s\n\n"
+        "## 3. User Requirements\n- Keep current-goal anchor first.\n\n"
+        "## 4. Non-Goals\n- No RAG.\n\n"
+        "## 5. Allowed Scope\n- hooks/\n- tests/\n\n"
+        "## 6. Protected Scope\n- secrets\n\n"
+        "## 7. Development Plan\n"
+        "- [ ] TASK-014: Active Mission Snapshot\n"
+        "- [ ] TASK-023: real regression\n\n"
+        "## 8. Acceptance Criteria\n- Snapshot survives long context.\n\n"
+        "## 9. Stop Conditions\n- Human decision needed.\n\n"
+        "## GitHub Sync Policy\n- Mode: github-sync.\n"
+        "- GitHub account: configured.\n"
+        "- Auth method: gh CLI.\n"
+        "- Credentials: available.\n"
+        "- Repository: existing repository.\n"
+        "- Repository creation: must use existing repository.\n"
+        "- Visibility: public/private as existing.\n"
+        "- Marker nodes: commit, push, tag, release.\n"
+        "- Allowed automatic operations: push, tag, release.\n\n"
+        "## 10. Submission Requirements\n- Publish v2.6.\n"
+    ) % ("Old completed phase history.\n" * 3000)
+
+    section = mission.extract_active_mission_snapshot(snapshot_spec)
+    test("extracts active mission snapshot",
+         "Current TASK Range: TASK-014 through TASK-023" in section,
+         section)
+    drift = mission.detect_goal_drift("Continue TASK-001 and release v2.1.", snapshot_spec)
+    test("detects stale task drift before old history wins",
+         drift.get("drift") and "TASK-001" in drift.get("reason", ""),
+         drift)
+    release_drift = mission.detect_goal_drift("Create release v2.2.", snapshot_spec)
+    test("detects release target drift",
+         release_drift.get("drift") and "v2.6" in release_drift.get("reason", ""),
+         release_drift)
+    typo_ok = mission.detect_goal_drift("Create release vv2.6.", snapshot_spec)
+    test("normalizes vv release typo",
+         not typo_ok.get("drift"),
+         typo_ok)
+
+    old_wiki = user_prompt.WIKI_DIR
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            user_prompt.WIKI_DIR = td
+            with open(os.path.join(td, "PROJECT_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(snapshot_spec)
+            with open(os.path.join(td, "INJECTION.md"), "w", encoding="utf-8") as f:
+                f.write("# Codex SpecPilot\n\n" + ("base context\n" * 1000))
+            injected = user_prompt.user_prompt_submit({"prompt": "开始工作"})
+            ctx = injected.get("hookSpecificOutput", {}).get("additionalContext", "")
+            test("prompt injection keeps snapshot before truncation",
+                 "### Active Mission Snapshot ###" in ctx
+                 and "TASK-014 through TASK-023" in ctx
+                 and len(ctx) <= user_prompt.MAX_CONTEXT_CHARS,
+                 ctx[:1200])
+    finally:
+        user_prompt.WIKI_DIR = old_wiki
+
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            stop.WIKI_DIR = td
+            for name, content in {
+                "PROJECT_SPEC.md": snapshot_spec,
+                "latest_context.md": "# Latest\n",
+                "JUDGE.md": "# Judge\n",
+                "loop_state.json": '{"loop_count":0,"auto_continue":false}',
+            }.items():
+                with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                    f.write(content)
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "continue",
+                    "reason": "old phase should continue",
+                    "next_action": "Continue TASK-001 using historical phase notes.",
+                    "auto_continue": True,
+                    "progress_made": False,
+                    "questions": [],
+                }),
+            }
+            result = stop.stop_judge({"last_assistant_message": "Worked from old history."})
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            test("stop judge converts stale next_action to revise",
+                 result.get("decision") == "block"
+                 and data.get("last_verdict") == "revise"
+                 and "Goal drift detected" in data.get("reason", ""),
+                 (result, data))
+    finally:
+        stop.call_codex_default = old_call
+        stop.WIKI_DIR = old_wiki
+
+
+def test_section_patch_evidence_status_and_phase_contract():
+    print("\n[Section patch / evidence reconciliation]")
+    steward = _load_hook_module("spec_steward")
+    evidence = _load_hook_module("evidence_reconciler")
+    status = _load_hook_module("status_normalizer")
+    phase = _load_hook_module("phase_contract")
+
+    base_spec = _complete_project_spec(
+        "- [ ] TASK-150: Finish real-world validation\n"
+        "- [x] TASK-151: Preserve release policy",
+        "- Validation evidence recorded."
+    )
+    patched = steward.apply_project_spec_section_patch(base_spec, [{
+        "op": "replace",
+        "heading": "Development Plan",
+        "content": (
+            "## 7. Development Plan\n"
+            "- [x] TASK-150: Finish real-world validation\n"
+            "- [x] TASK-151: Preserve release policy"
+        ),
+    }])
+    test("section patch updates one section without dropping submission tail",
+         "TASK-150" in patched
+         and "Report status" in patched
+         and patched.count("## 10. Submission Requirements") == 1,
+         patched[-1000:])
+
+    test("status aliases normalize quality-risk variants",
+         status.statuses_equivalent(
+             "phase16_complete_with_quality_fix_required",
+             "phase16_complete_with_quality_risks",
+         )
+         and status.status_indicates_complete("phase16_complete_with_quality_fix_required"),
+         status.normalize_status("phase16_complete_with_quality_fix_required"))
+
+    reconciliation = evidence.reconcile_project_spec_with_reports(base_spec, [{
+        "task_id": "TASK-150",
+        "status": "phase16_complete_with_quality_fix_required",
+        "source": "novelcreatepilot smoke report",
+    }])
+    test("evidence reconciliation finds completed evidence vs pending spec",
+         not reconciliation.get("ok")
+         and reconciliation.get("mismatches")
+         and "TASK-150" in reconciliation.get("change_request", ""),
+         reconciliation)
+
+    draft = phase.build_next_phase_contract_draft(patched, "All v2.6 tasks verified.")
+    test("phase contract drafts next phase after all tasks complete",
+         draft.get("ready")
+         and "controlled Spec Steward flow" in draft.get("change_request", ""),
+         draft)
+
+
+def test_controlled_spec_steward_write_channel():
+    print("\n[Controlled Spec Steward write channel]")
+    pre = _load_hook_module("pre_tool_guard")
+    old_wiki = pre.WIKI_DIR
+    old_guard_log = pre.GUARD_LOG
+    old_project_spec = pre.PROJECT_SPEC_PATH
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            pre.WIKI_DIR = td
+            pre.GUARD_LOG = os.path.join(td, "guard_log.jsonl")
+            pre.PROJECT_SPEC_PATH = os.path.join(td, "PROJECT_SPEC.md")
+            with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
+                f.write("# Spec\nspecpilot_self_development\n")
+
+            ordinary = pre.pre_tool_use({
+                "tool_input": {
+                    "command": "python3 hooks/spec_steward.py --apply --change 'update plan'"
+                }
+            })
+            test("ordinary spec steward apply command is denied",
+                 ordinary.get("hookSpecificOutput", {}).get("permissionDecision") == "deny",
+                 ordinary)
+
+            controlled = pre.pre_tool_use({
+                "tool_input": {
+                    "command": "CODEX_SPECPILOT_STEWARD=1 python3 hooks/spec_steward.py --apply --change 'update plan'"
+                }
+            })
+            test("controlled spec steward apply command is allowed",
+                 controlled == {},
+                 controlled)
+
+            direct_spec_patch = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "target_file": ".project_wiki/PROJECT_SPEC.md",
+                    "patch": "*** Update File: .project_wiki/PROJECT_SPEC.md\n",
+                },
+            })
+            test("direct PROJECT_SPEC patch is denied even in self-dev",
+                 direct_spec_patch.get("hookSpecificOutput", {}).get("permissionDecision") == "deny",
+                 direct_spec_patch)
+    finally:
+        pre.WIKI_DIR = old_wiki
+        pre.GUARD_LOG = old_guard_log
+        pre.PROJECT_SPEC_PATH = old_project_spec
+
+
 def test_readme_task006_role_boundaries():
     print("\n[README role boundaries]")
     readme = open(os.path.join(ROOT_DIR, "README.md"), encoding="utf-8").read()
@@ -1756,6 +1968,9 @@ def main():
     test_stop_incomplete_project_spec_enters_onboarding()
     test_spec_steward_controlled_update_flow()
     test_spec_steward_long_project_spec_prompt_keeps_tail()
+    test_active_mission_snapshot_goal_drift_and_context_budget()
+    test_section_patch_evidence_status_and_phase_contract()
+    test_controlled_spec_steward_write_channel()
     test_readme_task006_role_boundaries()
     test_codex_command_profile_inheritance()
     test_hooks_json_cross_platform_fields()

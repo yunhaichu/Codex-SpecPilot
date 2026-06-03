@@ -10,6 +10,8 @@ from project_paths import wiki_dir
 from project_injector import ensure_runtime_files
 from secret_scan import find_secret_material
 import spec_steward
+import mission_snapshot
+import phase_contract
 
 WIKI_DIR = wiki_dir()
 
@@ -1137,6 +1139,13 @@ def stop_judge(turn_payload):
         "Set progress_made true when the last turn completed a task, passed validation, "
         "or advanced the project plan; set it false only when the loop is repeating "
         "without useful progress. "
+        "Read task-book context in this priority order: Active Mission Snapshot, "
+        "current phase, current TASK, acceptance criteria, then historical "
+        "summaries/evidence. Completed historical phases must not override the "
+        "current goal anchor. If next_action, completion claims, or historical "
+        "summaries drift away from Active Mission Snapshot, use revise, "
+        "spec_update_required, or evidence reconciliation; do not continue from "
+        "the stale target. "
         "pass is only for a no-op reply; continue/revise when work should proceed; "
         "ordinary implementation, test, dependency, planning, or stage-goal "
         "blockers should not become human_review by default. Use PROJECT_SPEC, "
@@ -1149,6 +1158,9 @@ def stop_judge(turn_payload):
         "human_review only for a real user decision, secrets or credentials, "
         "external environment action, protected-scope authorization, scope choice, "
         "unsafe work, or irreducible ambiguity. "
+        "Classify blockers narrowly as engineering_recovery, evidence_reconciliation, "
+        "status_reconciliation, contract_update, user_decision, external_environment, "
+        "or unsafe/protected_scope. Only the last three normally justify human_review. "
         "GitHub sync, push, tag, checkpoint, release marker, or remote operations "
         "must follow PROJECT_SPEC GitHub policy. If policy is local-only or missing, "
         "do not request remote GitHub actions. If policy allows sync and the current "
@@ -1199,6 +1211,33 @@ def stop_judge(turn_payload):
         llm_auto_continue = False
         progress_made = False
         questions = []
+
+    drift = mission_snapshot.detect_goal_drift(next_action, project_spec)
+    if drift.get("drift") and verdict in ("continue", "revise"):
+        verdict = "revise"
+        reason = "Goal drift detected against Active Mission Snapshot: %s" % drift.get("reason", "")
+        next_action = (
+            "Re-align the next step with Active Mission Snapshot/current TASK range, "
+            "then continue development or run controlled evidence/spec reconciliation "
+            "if the task contract itself is inconsistent."
+        )
+        llm_auto_continue = True
+        progress_made = False
+
+    if verdict == "done":
+        incomplete_task = phase_contract.next_incomplete_task(project_spec)
+        if incomplete_task:
+            verdict = "continue"
+            reason = (
+                "PROJECT_SPEC still has incomplete Development Plan work: %s."
+                % incomplete_task["task_id"]
+            )
+            next_action = (
+                "Continue with %s: %s, then validate acceptance evidence before "
+                "requesting final completion."
+                % (incomplete_task["task_id"], incomplete_task["title"])
+            )
+            progress_made = True
 
     # Permission gate on auto-continue. For continue/revise, an explicit
     # next_action is enough to drive the next loop; unsafe or unclear work

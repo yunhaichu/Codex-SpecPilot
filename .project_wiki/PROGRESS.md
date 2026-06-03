@@ -238,6 +238,7 @@ Conclusion:
   - Thread id: `019e8270-27fd-7e62-ad77-a22a950807b1`.
 - Direct loop evidence:
   - A single `开始工作` prompt drove the example through TASK-001, TASK-002, TASK-003, completion-report regeneration, and final Stop judgment.
+
   - The example was already mostly complete before this repeat trial; TASK-001 validated existing `add` / `subtract` implementation without source rewrite.
   - TASK-002 modified `examples/minimal_supervised_project/tests/test_calculator.py` by adding zero-value test coverage.
   - TASK-003 modified `examples/minimal_supervised_project/README.md` with the module purpose and `python run_tests.py` test command.
@@ -492,3 +493,30 @@ Conclusion:
   - `python3 tests/smoke_test.py`: passed, 124 tests.
 - Status classification:
   - This TASK-011 result is code-ready validation of the automatic task-contract update confirmation flow. It does not claim a new real-world mid-development user-change trial beyond existing smoke coverage.
+
+## v2.6 autonomous contract governance validation (2026-06-03)
+- Result: real-world verified for TASK-014 through TASK-023 implementation.
+- Implemented:
+  - Active Mission Snapshot parsing and priority context preservation.
+  - Goal drift detection for stale TASK ids and release-label conflicts, including `vv2.6` normalization to `v2.6`.
+  - Section-level PROJECT_SPEC patch helpers for long task-book updates.
+  - Task evidence reconciliation for completed-report evidence versus pending Development Plan state.
+  - Controlled Spec Steward write-channel gate for PROJECT_SPEC apply commands.
+  - Narrow blocker taxonomy in Stop Hook to prefer self-recovery, revise, evidence reconciliation, or controlled contract update over broad `human_review`.
+  - Status enum normalization for quality-risk aliases.
+  - Phase closure / next-phase contract draft helper.
+  - Context budget behavior that preserves Active Mission Snapshot, late Development Plan, GitHub policy, stop conditions, and submission requirements.
+- Validation:
+  - `python3 -m py_compile hooks/*.py tests/smoke_test.py`: pass.
+  - `python3 tests/smoke_test.py`: pass, 145/145.
+  - `python3 -m unittest tests.test_phase16_commercial_quality_acceptance` in `/Users/yinhuicong/Documents/novelcreatepilot`: pass, 4/4.
+- novelcreatepilot direct regression evidence:
+  - Real PROJECT_SPEC length: 37274 characters.
+  - Synthetic Active Mission Snapshot plus real long task book compacted to 5784 characters while preserving snapshot, TASK-150, and Submission Requirements.
+  - Goal drift detection caught stale `TASK-147` against current `TASK-148 through TASK-150`.
+  - Status alias `phase16_complete_with_quality_fix_required` normalized to `phase16_complete_with_quality_risks` and counted as complete evidence.
+  - Evidence reconciliation found TASK-150 complete evidence while PROJECT_SPEC still showed pending, producing a controlled change request.
+  - No target project contract was modified during the regression.
+- Release target:
+  - User confirmed release label `vv2.6` should be treated as `v2.6`.
+  - GitHub push/tag/release is authorized for this phase after validation passes.

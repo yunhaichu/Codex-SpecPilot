@@ -82,10 +82,23 @@ def call_codex_default(prompt, timeout=120):
             cwd=WIKI_DIR,
             env=env,
         )
-        stdout_lines = []
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            stdout_lines.append(line)
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate(timeout=5)
+            return {
+                "ok": False,
+                "content": "",
+                "error": "codex exec timed out after %s seconds" % timeout,
+                "profile": profile,
+                "command_mode": command_mode,
+                "raw_stdout": (stdout or "")[-2000:],
+                "raw_stderr": (stderr or "")[-2000:],
+            }
+
+        stdout_lines = (stdout or "").splitlines(True)
+        for line in stdout_lines:
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -93,8 +106,6 @@ def call_codex_default(prompt, timeout=120):
             item = event.get("item", {}) if isinstance(event, dict) else {}
             if event.get("type") == "item.completed" and item.get("type") == "agent_message":
                 content = item.get("text", "").strip()
-                proc.kill()
-                proc.wait(timeout=1)
                 return {
                     "ok": True,
                     "content": content,
@@ -103,8 +114,7 @@ def call_codex_default(prompt, timeout=120):
                     "command_mode": command_mode,
                 }
 
-        stderr = proc.stderr.read() if proc.stderr is not None else ""
-        returncode = proc.wait(timeout=timeout)
+        returncode = proc.returncode
         if returncode == 0:
             return {
                 "ok": True,
@@ -117,14 +127,6 @@ def call_codex_default(prompt, timeout=120):
             "ok": False,
             "content": "",
             "error": "codex exec returned %d: %s" % (returncode, stderr.strip()),
-            "profile": profile,
-            "command_mode": command_mode,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "ok": False,
-            "content": "",
-            "error": "codex exec timed out",
             "profile": profile,
             "command_mode": command_mode,
         }

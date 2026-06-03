@@ -117,16 +117,35 @@ def _is_self_dev_allowed_supervision_target(path, project_spec):
         return False
     normalized = os.path.normpath(str(path)).replace("\\", "/").replace(os.sep, "/")
     basename = normalized.rstrip("/").rsplit("/", 1)[-1]
+    if basename == "PROJECT_SPEC.md":
+        return False
     if (normalized.startswith("hooks/") or "/hooks/" in normalized) and normalized.endswith(".py"):
         return True
     if normalized == ".codex/hooks.json" or normalized.endswith("/.codex/hooks.json"):
         return True
     return basename in {
-        "PROJECT_SPEC.md",
         "PROJECT_SPEC_TEMPLATE.md",
         "COMPLETION_REPORT_TEMPLATE.md",
         "INJECTION.md",
     }
+
+
+def _is_spec_steward_apply_command(command):
+    normalized = (command or "").replace("\\", "/")
+    return (
+        "--apply" in normalized
+        and (
+            "hooks/spec_steward.py" in normalized
+            or "-m hooks.spec_steward" in normalized
+        )
+    )
+
+
+def _is_controlled_spec_steward_command(command):
+    return (
+        _is_spec_steward_apply_command(command)
+        and "CODEX_SPECPILOT_STEWARD=1" in (command or "")
+    )
 
 
 def _check_judge_system_boundary(file_paths, project_spec):
@@ -232,6 +251,17 @@ def pre_tool_use(turn_payload):
 
     # 1. Judge system boundary check. This is the minimal non-AI boundary.
     project_spec = _read_project_spec()
+    if command and _is_spec_steward_apply_command(command):
+        if _is_controlled_spec_steward_command(command):
+            return {}
+        reason = "PROJECT_SPEC updates must use the controlled Spec Steward write channel."
+        _log_deny(command or tool_name, reason)
+        return {"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }}
+
     blocked, reason = _check_judge_system_boundary(file_paths, project_spec)
     if blocked:
         _log_deny(command or tool_name, reason)

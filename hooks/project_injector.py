@@ -26,12 +26,16 @@ IGNORED_NAMES = {
 HOOK_FILES = (
     "__init__.py",
     "codex_client.py",
+    "evidence_reconciler.py",
+    "mission_snapshot.py",
     "permission_policy.py",
+    "phase_contract.py",
     "pre_tool_guard.py",
     "project_injector.py",
     "project_paths.py",
     "secret_scan.py",
     "spec_steward.py",
+    "status_normalizer.py",
     "stop_judge.py",
     "user_prompt_submit.py",
 )

@@ -11,6 +11,7 @@ if os.environ.get("CODEX_SPECPILOT_CHILD") == "1":
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from project_paths import wiki_dir
 from project_injector import ensure_runtime_files
+from mission_snapshot import extract_active_mission_snapshot
 
 WIKI_DIR = wiki_dir()
 
@@ -164,6 +165,14 @@ def user_prompt_submit(turn_payload):
 
     # Put dynamic control rules first so truncation cannot remove them.
     dynamic_context = ""
+    project_spec = _read_file(PROJECT_SPEC_FILE)
+    snapshot = extract_active_mission_snapshot(project_spec or "")
+    if snapshot:
+        dynamic_context += (
+            "\n\n### Active Mission Snapshot ###\n"
+            "Use this as the current-goal anchor before historical summaries.\n"
+            "%s\n" % snapshot
+        )
     needs_onboarding = _project_spec_needs_onboarding()
     if needs_onboarding:
         dynamic_context += ONBOARDING_RULE

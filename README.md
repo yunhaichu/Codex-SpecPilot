@@ -16,6 +16,7 @@ It helps a user turn a rough idea into a structured task contract, then lets Cod
 - Apply clear task-contract change suggestions through Spec Steward without asking the user to edit project files by hand.
 - Treat a simple approval such as `同意`, `yes`, `ok`, or `apply` as confirmation of the previously summarized contract update.
 - Refuse to apply rejected or ambiguous contract confirmations until the user gives a clear approval or replacement change.
+- Keep an Active Mission Snapshot at the front of long task contracts so the current goal, task range, acceptance focus, non-goals, and release target do not get blurred by old history.
 - Inject the current task contract and project state into Codex before each user prompt.
 - Refresh managed Hook runtime files and static wiki templates when a project opens with an older local copy.
 - Block ordinary worker edits to judge-system files such as `PROJECT_SPEC.md`, Hook source, Hook config, and supervision state.
@@ -23,7 +24,8 @@ It helps a user turn a rough idea into a structured task contract, then lets Cod
 - Automatically continue the Codex loop when the Stop Hook decides the next step is clear and allowed.
 - Treat ordinary implementation, test, dependency, or planning blockers as work to investigate and recover from before asking the user.
 - Re-check the current stage goal or Development Plan when there is no direct recovery path, then route real contract changes through Spec Steward.
-- Preserve key task-book sections when `.project_wiki/PROJECT_SPEC.md` is long, including late Development Plan items and submission requirements.
+- Preserve key task-book sections when `.project_wiki/PROJECT_SPEC.md` is long, including the Active Mission Snapshot, late Development Plan items, GitHub policy, stop conditions, and submission requirements.
+- Reconcile task evidence when reports say a task is complete but the Development Plan still shows it as pending.
 - Pause development when the user changes project goals, scope, priorities, or acceptance criteria, then invoke the controlled task-contract update flow directly.
 - Run a user-perspective experience evaluation before final completion reporting.
 - Convert obvious high-value user-facing evaluation findings into controlled task-contract updates before development continues.
@@ -50,14 +52,16 @@ Codex SpecPilot stays intentionally small. It is not a full GitHub platform, CI 
 
 - User: provides goals, scope, priorities, acceptance criteria, and mid-development change suggestions or approvals.
 - Requirement parsing: turns confirmed user intent into task-contract changes; ambiguous changes stay in minimum necessary questions instead of code edits.
-- Spec Steward: the controlled writer for `.project_wiki/PROJECT_SPEC.md`; it applies clear suggestions or explicit approvals such as `同意`, and asks only when information is insufficient.
+- Spec Steward: the controlled writer for `.project_wiki/PROJECT_SPEC.md`; it applies clear suggestions or explicit approvals such as `同意`, supports section-level updates, and asks only when information is insufficient.
 - Planner: the Development Plan inside `PROJECT_SPEC.md`; it converts the confirmed contract into ordered `TASK-*` work.
 - Codex Worker: implements the current Development Plan task and must not rewrite the task contract or judge-system files.
 - Stop Hook: judges each turn and may return `continue`, `revise`, `done`, `human_review`, or `spec_update_required`; ordinary blockers should become concrete recovery or stage-replan actions, while goal changes pause Worker development so Spec Steward can update the contract.
 
 ## Long Task Books
 
-SpecPilot does not require the user to shorten a long `.project_wiki/PROJECT_SPEC.md`. Hooks build compact prompt context from the key sections and keep both the beginning and end of long sections, so late Development Plan tasks, GitHub policy, stop conditions, and submission requirements remain visible.
+SpecPilot does not require the user to shorten a long `.project_wiki/PROJECT_SPEC.md`. Hooks first preserve the Active Mission Snapshot, then build compact prompt context from the key sections and keep both the beginning and end of long sections, so late Development Plan tasks, GitHub policy, stop conditions, and submission requirements remain visible.
+
+If old summaries, completed phases, or stale reports conflict with the Active Mission Snapshot, the current snapshot wins. The Stop Hook should revise the next action, run evidence reconciliation, or route a real contract change through Spec Steward instead of continuing from the stale target.
 
 ## macOS Install
 
@@ -107,6 +111,7 @@ Codex SpecPilot 是一个公开的 MIT 许可证项目，用来让 Codex 按清�
 - 用户提出清晰任务合同修改建议时，直接通过 Spec Steward 更新，不要求用户手动编辑项目文件。
 - 用户回复 `同意`、`yes`、`ok`、`apply` 等确认时，视为确认前一次已总结的合同更新。
 - 用户拒绝或含糊确认前一次合同更新时，不写入任务书，只请求最少确认或新的修改建议。
+- 在长任务书前部维护 Active Mission Snapshot，固定当前目标、任务范围、验收重点、非目标和发布目标，避免旧历史模糊当前开发方向。
 - 每轮用户输入前，把当前任务合同和项目状态注入给 Codex。
 - 当目标项目里的本地 Hook 副本或静态 Wiki 模板过旧时，自动补齐或刷新受管文件。
 - 阻止普通 Worker 修改判断体系文件，例如 `PROJECT_SPEC.md`、Hook 源码、Hook 配置和监督状态。
@@ -114,7 +119,8 @@ Codex SpecPilot 是一个公开的 MIT 许可证项目，用来让 Codex 按清�
 - 当 Stop Hook 判断下一步明确且允许时，自动推动 Codex 继续工作。
 - 遇到普通实现、测试、依赖或规划卡点时，先推动 Codex 调查、修复、验证或调整阶段计划，而不是直接把问题交给用户。
 - 如果没有直接解法，先重审当前阶段目标或 Development Plan；确实需要改任务合同时，再走 Spec Steward。
-- 长任务书会以关键章节和头尾保真的方式导入 Hook 判断，避免后段任务或提交要求被截断。
+- 长任务书会优先保留 Active Mission Snapshot，并以关键章节和头尾保真的方式导入 Hook 判断，避免后段任务、GitHub 策略、停止条件或提交要求被截断。
+- 当报告证据显示任务已完成但 Development Plan 仍显示 pending 时，进入任务证据对账或受控合同修复。
 - 当用户在开发中修改目标、范围、优先级或验收标准时，暂停开发并直接调用受控任务合同更新流程。
 - 最终完成报告前，先执行使用者视角体验测评。
 - 将明显且高价值的用户体验问题转成受控任务合同更新，再继续开发。
@@ -141,14 +147,16 @@ Codex SpecPilot 保持轻量。它不是完整 GitHub 平台、CI 系统、发�
 
 - 用户：提出项目目标、范围、优先级、验收标准，以及开发中途的任务合同修改建议或确认。
 - 需求解析：把用户已确认的意图转成任务合同变更；不清楚的变更只问最少必要问题，不直接写代码。
-- Spec Steward：`.project_wiki/PROJECT_SPEC.md` 的受控写入者；对清晰建议或 `同意` 这类明确确认可直接应用，信息不足时才提问。
+- Spec Steward：`.project_wiki/PROJECT_SPEC.md` 的受控写入者；对清晰建议或 `同意` 这类明确确认可直接应用，支持章节级更新，信息不足时才提问。
 - Planner：`PROJECT_SPEC.md` 里的 Development Plan；把已确认合同拆成有顺序的 `TASK-*`。
 - Codex Worker：只实现当前 Development Plan 任务，不改写任务合同或判断体系文件。
 - Stop Hook：每轮判断 `continue`、`revise`、`done`、`human_review` 或 `spec_update_required`；普通卡点应转成明确恢复或阶段重规划动作，用户改目标时才暂停 Worker 并让 Spec Steward 更新合同。
 
 ## 长任务书
 
-SpecPilot 不要求用户手动缩短 `.project_wiki/PROJECT_SPEC.md`。Hook 会从关键章节构造紧凑上下文，并保留长章节的开头和结尾，确保后段 Development Plan、GitHub 策略、停止条件和提交要求仍能进入判断。
+SpecPilot 不要求用户手动缩短 `.project_wiki/PROJECT_SPEC.md`。Hook 会先保留 Active Mission Snapshot，再从关键章节构造紧凑上下文，并保留长章节的开头和结尾，确保后段 Development Plan、GitHub 策略、停止条件和提交要求仍能进入判断。
+
+如果旧摘要、已完成阶段或过期报告与 Active Mission Snapshot 冲突，应以当前目标锚点为准。Stop Hook 应纠偏下一步、运行证据对账，或把真实合同变化交给 Spec Steward，而不是沿着旧目标继续开发。
 
 ## macOS 安装
 

@@ -12,17 +12,27 @@
 ## 4. Validation
 列出运行过的测试或检查。
 
-## 5. Remaining Issues
+## 5. Active Mission Snapshot Check
+- Current goal anchor preserved:
+- Current TASK range completed:
+- Long task-book context kept required tail sections:
+
+## 6. Evidence Reconciliation
+- Task evidence and Development Plan status agree:
+- Status aliases normalized:
+- Pending mismatches:
+
+## 7. Remaining Issues
 如有遗留问题，列出。
 
-## 6. Permission Notes
+## 8. Permission Notes
 说明是否触发过权限拦截、是否存在越权尝试。
 
-## 7. Final Status
+## 9. Final Status
 - done
 - human_review
 
-## 8. Experience Evaluation
+## 10. Experience Evaluation
 - Status:
 - Decision:
 - Findings:

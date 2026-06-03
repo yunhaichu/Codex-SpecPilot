@@ -145,6 +145,8 @@ def command_has_write_intent(command):
         r"\bperl\s+-pi\b",
         r"\bpython\s+-c\b",
         r"\bpython3\s+-c\b",
+        r"\bpython(?:3)?\b.*\bhooks[/\\]spec_steward\.py\b.*\b--apply\b",
+        r"\bpython(?:3)?\b.*\b-m\s+hooks\.spec_steward\b.*\b--apply\b",
         r"\btruncate\b",
         r"\bdel\b",
         r"\berase\b",

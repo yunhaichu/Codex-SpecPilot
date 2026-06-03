@@ -11,15 +11,33 @@ control until the task is complete or a real human decision is required.
 When working under SpecPilot:
 
 1. Read `.project_wiki/PROJECT_SPEC.md`.
-2. Find the first incomplete `TASK-*` in Development Plan.
-3. Work only on the current task.
-4. At the end of the turn, report:
+2. Read Active Mission Snapshot as the current-goal anchor before historical summaries.
+3. Find the first incomplete `TASK-*` in the current Development Plan range.
+4. Work only on the current task.
+5. At the end of the turn, report:
    - current task id;
    - files changed;
    - validation performed;
    - whether the task is done;
    - what should happen next.
-5. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
+6. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
+
+## Active Mission Snapshot Rule
+Long task books must keep an Active Mission Snapshot near the front of
+`PROJECT_SPEC.md`. Treat it as the current-goal anchor for:
+
+- current goal and current phase;
+- current `TASK-*` range;
+- current acceptance focus;
+- current non-goals;
+- release or GitHub sync target;
+- context priority.
+
+If historical summaries, completed phases, old task reports, or previous
+completion claims conflict with the Active Mission Snapshot, use the snapshot
+first. The correct response is a concrete revise step, evidence reconciliation,
+or controlled `spec_update_required` when the task contract itself needs to
+change.
 
 ## Blocker Self-Recovery Rule
 When development hits an implementation, test, dependency, planning, or stage
@@ -39,6 +57,19 @@ Use `human_review` only when the blocker truly needs user judgment, secrets or
 credentials, external environment action, protected-scope authorization, a
 scope choice, or an ambiguity Codex cannot resolve from the task book and wiki
 facts.
+
+Classify blockers narrowly:
+
+- `engineering_recovery`: investigate, fix, rerun validation;
+- `evidence_reconciliation`: compare reports, tests, completion claims, and task status;
+- `status_reconciliation`: normalize status aliases and repair inconsistent state;
+- `contract_update`: use controlled Spec Steward;
+- `user_decision`: stop for the user;
+- `external_environment`: stop for environment or credential action;
+- `unsafe/protected_scope`: stop unless explicitly authorized.
+
+Only `user_decision`, `external_environment`, and `unsafe/protected_scope`
+normally justify `human_review`.
 
 ## Goal Change Rule
 Users may change project goals during development. When the current user prompt
@@ -95,9 +126,14 @@ pretending the sync succeeded.
 split, or rewrite the task book to fit a Hook prompt.
 
 Hooks should use compact key-section context or section head/tail preservation
-so Project Goal, User Requirements, Non-Goals, Allowed Scope, Protected Scope,
-Development Plan, Acceptance Criteria, Stop Conditions, GitHub policy, and
-Submission Requirements remain visible, including late Development Plan tasks.
+so Active Mission Snapshot, Project Goal, User Requirements, Non-Goals, Allowed
+Scope, Protected Scope, Development Plan, Acceptance Criteria, Stop Conditions,
+GitHub policy, and Submission Requirements remain visible, including late
+Development Plan tasks.
+
+Do not perform full task-book rewrites when a section-level update is enough.
+Use the controlled Spec Steward / section patch flow so long contracts keep
+their current snapshot, late tasks, GitHub policy, and submission requirements.
 
 ## Start Work Rule
 When the user says `开始工作`:

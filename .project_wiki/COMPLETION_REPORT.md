@@ -321,3 +321,74 @@ _No completion report yet._
 ### Filtered Suggestions
 
 - Local changes are not committed, pushed, or released yet, but the spec says remote submit/release is local-only/default optional unless explicitly requested, so this is not a blocker.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-02T09:42:46.704386+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Available evidence shows the target user workflow has been completed and validated: required tasks are marked complete, core Stop Hook/self-resolution and long-spec handling requirements were implemented, tests passed, release v2.2 was published, and the workspace is clean. No obvious practical user-facing blocker is visible from the supplied context.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Available evidence shows the target user workflow has been completed and validated: required tasks are marked complete, core Stop Hook/self-resolution and long-spec handling requirements were implemented, tests passed, release v2.2 was published, and the workspace is clean. No obvious practical user-facing blocker is visible from the supplied context.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-02T09:48:10.173855+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: Available evidence indicates the target user workflow is complete: the v2.2 hooks are installed locally, hook configuration validates, required development-plan items are marked complete, tests/release/deployment were reported successful, and no practical user-facing blocker is visible from the supplied context.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: no obvious user-facing issues found
+- Decision: final_done
+- Reason: Available evidence indicates the target user workflow is complete: the v2.2 hooks are installed locally, hook configuration validates, required development-plan items are marked complete, tests/release/deployment were reported successful, and no practical user-facing blocker is visible from the supplied context.
+
+## Stop Hook Done Record
+- Timestamp: 2026-06-03T09:29:12.679182+00:00
+- Verdict: done
+- Reason: Experience evaluation passed: The supplied PROJECT_SPEC already includes completed tasks and acceptance coverage for the practical blockers surfaced in the historical-session review, especially long spec handling, narrower human_review escalation, protected spec update flow, and final experience evaluation gating. The last assistant message was an analysis of an older session, not evidence that the current completed implementation is failing for the target user.
+- Next action: None (task complete)
+
+## Experience Evaluation
+
+- Status: issues filtered as low-value/out-of-scope
+- Decision: final_done
+- Reason: The supplied PROJECT_SPEC already includes completed tasks and acceptance coverage for the practical blockers surfaced in the historical-session review, especially long spec handling, narrower human_review escalation, protected spec update flow, and final experience evaluation gating. The last assistant message was an analysis of an older session, not evidence that the current completed implementation is failing for the target user.
+
+### Filtered Suggestions
+
+- The historical session listed older SpecPilot pain points, but the current PROJECT_SPEC and latest context indicate those areas have already been converted into completed scope or are outside the current finalization evidence.
+
+## v2.6 Completion Evidence
+- Timestamp: 2026-06-03
+- Status: pre-release validation complete.
+- Scope: TASK-014 through TASK-023.
+- Completed requirements:
+  - Active Mission Snapshot / current goal anchor.
+  - Goal drift detection for stale TASK ids and release label conflicts.
+  - Long PROJECT_SPEC section patch helpers.
+  - Task evidence reconciliation.
+  - Controlled Spec Steward write-channel gate.
+  - Phase closure and next-phase contract draft helper.
+  - Narrowed human_review taxonomy.
+  - Status enum normalization.
+  - Context budget and phase-history archive strategy.
+  - novelcreatepilot real-project regression validation.
+- Validation:
+  - `python3 -m py_compile hooks/*.py tests/smoke_test.py`: pass.
+  - `python3 tests/smoke_test.py`: pass, 145/145.
+  - `/Users/yinhuicong/Documents/novelcreatepilot`: `python3 -m unittest tests.test_phase16_commercial_quality_acceptance`: pass, 4/4.
+- Active Mission Snapshot check:
+  - Snapshot parsing and prompt priority tested.
+  - Long task-book compaction preserved snapshot, TASK-150, and Submission Requirements in the novelcreatepilot regression.
+- Evidence reconciliation:
+  - Status alias `phase16_complete_with_quality_fix_required` normalized to `phase16_complete_with_quality_risks`.
+  - TASK-150 complete evidence versus pending PROJECT_SPEC state produced a controlled change request.
+- Experience evaluation status:
+  - No new obvious user-facing blocker found in this implementation evidence.
+  - The practical user pain points from the reported ten core issues are represented by implemented checks and smoke coverage.
+- Release target:
+  - Publish tag/release `v2.6`; context typo `vv2.6` is treated as `v2.6`.
