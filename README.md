@@ -51,17 +51,29 @@ Codex SpecPilot stays intentionally small. It is not a full GitHub platform, CI 
 ## Role Boundaries
 
 - User: provides goals, scope, priorities, acceptance criteria, and mid-development change suggestions or approvals.
-- Requirement parsing: turns confirmed user intent into task-contract changes; ambiguous changes stay in minimum necessary questions instead of code edits.
-- Spec Steward: the controlled writer for `.project_wiki/PROJECT_SPEC.md`; it applies clear suggestions or explicit approvals such as `同意`, supports section-level updates, and asks only when information is insufficient.
+- Requirement parsing: turns user intent into task-contract changes; once a complete task contract exists, ambiguous stage-transition details are resolved from wiki facts, evidence, and the current goal before asking the user.
+- Spec Steward: the controlled writer for `.project_wiki/PROJECT_SPEC.md`; it applies clear suggestions, explicit approvals such as `同意`, and automatic phase-transition updates with section-level patches.
 - Planner: the Development Plan inside `PROJECT_SPEC.md`; it converts the confirmed contract into ordered `TASK-*` work.
 - Codex Worker: implements the current Development Plan task and must not rewrite the task contract or judge-system files.
-- Stop Hook: judges each turn and may return `continue`, `revise`, `done`, `human_review`, or `spec_update_required`; ordinary blockers should become concrete recovery or stage-replan actions, while goal changes pause Worker development so Spec Steward can update the contract.
+- Stop Hook: judges each turn and may return `continue`, `revise`, `done`, `human_review`, or `spec_update_required`; ordinary blockers and phase transitions become concrete recovery, stage-replan, or automatic Spec Steward actions, while normal conversation is recorded as a lightweight pass instead of starting the task loop.
+
+## Protected Maintenance Authorization
+
+When Hook runtime maintenance is required, the user does not manually disable protection or edit protected files. SpecPilot asks for confirmation with exact target files. If the user replies `同意`, `允许`, `可以`, or an equivalent approval, UserPromptSubmit creates a short-lived one-shot maintenance lease. PreToolUse may consume that lease once, only for the listed maintenance files, and the lease expires after use.
+
+The lease is not a backdoor for `.project_wiki/PROJECT_SPEC.md`, judge logs, loop state, secrets, or mixed business-file patches. Task-contract updates still go through the controlled Spec Steward flow.
 
 ## Long Task Books
 
 SpecPilot does not require the user to shorten a long `.project_wiki/PROJECT_SPEC.md`. Hooks first preserve the Active Mission Snapshot, then build compact prompt context from the key sections and keep both the beginning and end of long sections, so late Development Plan tasks, GitHub policy, stop conditions, and submission requirements remain visible.
 
 If old summaries, completed phases, or stale reports conflict with the Active Mission Snapshot, the current snapshot wins. The Stop Hook should revise the next action, run evidence reconciliation, or route a real contract change through Spec Steward instead of continuing from the stale target.
+
+## Automatic Phase Transitions
+
+After `.project_wiki/PROJECT_SPEC.md` is complete, SpecPilot should not ask the user to confirm phase handoffs, next-task activation, task status reconciliation, experience-evaluation follow-up, or Development Plan carry-over. Stop Hook routes those changes through Spec Steward automatically, and if more facts are needed it tells Worker to inspect the wiki, evidence, changed files, and current goal before retrying the controlled update.
+
+Repeated user questions are reserved for initial project creation/onboarding, when requirements, goals, scope, or acceptance criteria are not yet clear enough to write the first complete task contract.
 
 ## macOS Install
 
@@ -76,6 +88,8 @@ No token, API key, password, or private key is requested or stored.
 Projects are local-only unless `.project_wiki/PROJECT_SPEC.md` explicitly enables GitHub sync. Remote operations such as push, tag, release, repository creation, pull requests, or GitHub checkpoints require a complete non-secret policy: GitHub account, auth method description, credential availability, repository target, existing-vs-new repository policy, public/private visibility, marker nodes, and the exact automatic operations allowed.
 
 If the policy is missing, local-only, incomplete, says credentials are unavailable, or requires human confirmation for the requested remote operation, SpecPilot stops for human review instead of attempting the operation.
+
+If the Active Mission Snapshot or Submission Requirements already record a current GitHub release/sync authorization but the formal GitHub Sync Policy is still local-only or incomplete, Stop Hook routes to controlled policy reconciliation (`spec_update_required`) before any remote action. Missing credentials still fail safe.
 
 ## Runtime Updates
 
@@ -146,17 +160,29 @@ Codex SpecPilot 保持轻量。它不是完整 GitHub 平台、CI 系统、发�
 ## 角色分工
 
 - 用户：提出项目目标、范围、优先级、验收标准，以及开发中途的任务合同修改建议或确认。
-- 需求解析：把用户已确认的意图转成任务合同变更；不清楚的变更只问最少必要问题，不直接写代码。
-- Spec Steward：`.project_wiki/PROJECT_SPEC.md` 的受控写入者；对清晰建议或 `同意` 这类明确确认可直接应用，支持章节级更新，信息不足时才提问。
+- 需求解析：把用户意图转成任务合同变更；完整任务书存在后，阶段过渡细节优先从 wiki 事实、证据和当前目标自动收敛。
+- Spec Steward：`.project_wiki/PROJECT_SPEC.md` 的受控写入者；对清晰建议、`同意` 这类明确确认和阶段过渡更新可直接应用，支持章节级更新。
 - Planner：`PROJECT_SPEC.md` 里的 Development Plan；把已确认合同拆成有顺序的 `TASK-*`。
 - Codex Worker：只实现当前 Development Plan 任务，不改写任务合同或判断体系文件。
-- Stop Hook：每轮判断 `continue`、`revise`、`done`、`human_review` 或 `spec_update_required`；普通卡点应转成明确恢复或阶段重规划动作，用户改目标时才暂停 Worker 并让 Spec Steward 更新合同。
+- Stop Hook：每轮判断 `continue`、`revise`、`done`、`human_review` 或 `spec_update_required`；普通卡点和阶段过渡应转成明确恢复、阶段重规划或自动 Spec Steward 动作，普通对话只记录轻量 pass，不启动任务循环。
+
+## 受保护维护授权
+
+当 Hook 运行时本身需要维护时，用户不需要手动关闭保护或手动编辑受保护文件。SpecPilot 会列出精确目标文件并请求确认。用户回复 `同意`、`允许`、`可以` 或等价确认后，UserPromptSubmit 会创建短时一次性维护租约。PreToolUse 只能消费一次该租约，只放行租约列出的维护文件，消费后自动失效。
+
+该租约不能用于 `.project_wiki/PROJECT_SPEC.md`、判断日志、循环状态、secret，或夹带业务文件的 patch。任务合同更新仍必须走受控 Spec Steward 流程。
 
 ## 长任务书
 
 SpecPilot 不要求用户手动缩短 `.project_wiki/PROJECT_SPEC.md`。Hook 会先保留 Active Mission Snapshot，再从关键章节构造紧凑上下文，并保留长章节的开头和结尾，确保后段 Development Plan、GitHub 策略、停止条件和提交要求仍能进入判断。
 
 如果旧摘要、已完成阶段或过期报告与 Active Mission Snapshot 冲突，应以当前目标锚点为准。Stop Hook 应纠偏下一步、运行证据对账，或把真实合同变化交给 Spec Steward，而不是沿着旧目标继续开发。
+
+## 自动阶段过渡
+
+`.project_wiki/PROJECT_SPEC.md` 完整后，SpecPilot 不应再要求用户确认阶段交接、下一任务激活、任务状态对账、体验测评后续任务或 Development Plan 衔接。Stop Hook 会把这些变化自动交给 Spec Steward；如果还缺事实，会驱动 Worker 读取 wiki、证据、变更文件和当前目标后重试受控更新。
+
+只有项目创建/onboarding 初期，在需求、目标、范围或验收标准还不足以写出完整任务书时，才允许反复向用户提问确认。
 
 ## macOS 安装
 
@@ -171,6 +197,8 @@ SpecPilot 不要求用户手动缩短 `.project_wiki/PROJECT_SPEC.md`。Hook 会
 除非 `.project_wiki/PROJECT_SPEC.md` 明确启用 GitHub sync，项目默认是 local-only。push、tag、release、创建仓库、创建 PR、GitHub checkpoint 等远端操作必须有完整的非密钥策略：GitHub 账号、认证方式描述、凭据可用状态、仓库目标、已有或新建仓库策略、public/private、marker 节点，以及允许自动执行的具体操作。
 
 如果策略缺失、local-only、不完整、凭据不可用，或请求的远端操作需要人工确认，SpecPilot 会进入 human_review，而不是尝试执行该操作。
+
+如果 Active Mission Snapshot 或提交要求已经记录了当前 GitHub 发布/同步授权，但正式 GitHub Sync Policy 仍是 local-only 或不完整，Stop Hook 会先进入受控策略对齐（`spec_update_required`），写入完整策略后才允许任何远端动作。凭据不可用仍然安全停下。
 
 ## 运行时更新
 

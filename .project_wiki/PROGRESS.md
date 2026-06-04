@@ -520,3 +520,31 @@ Conclusion:
 - Release target:
   - User confirmed release label `vv2.6` should be treated as `v2.6`.
   - GitHub push/tag/release is authorized for this phase after validation passes.
+
+## TASK-029 automatic phase-transition governance (2026-06-04)
+- Result: code-ready pass; PROJECT_SPEC status updated to `[x]` through controlled Spec Steward flow.
+- Implemented:
+  - Stop Hook now returns `decision:block` with `VERDICT: continue` and `AUTO_CONTINUE: enabled` after Spec Steward successfully applies a controlled contract update, so Worker continues from the updated Active Mission Snapshot / Development Plan without another user confirmation.
+  - Stop Hook converts Spec Steward `needs_user_confirmation` and unparseable/rejected controlled-update failures into automatic `revise` next actions for evidence gathering or narrower section patch retries, instead of surfacing routine phase-transition questions to the user.
+  - Stop Hook conversation mode records a lightweight pass for ordinary chats and bypasses the full Stop Judge AI path.
+  - Spec Steward now rejects proposed PROJECT_SPEC updates that silently drop existing `TASK-*` ids, preventing Development Plan truncation during section patch updates.
+  - UserPromptSubmit / task intent classify phase-transition automation directives as development intent with no user confirmation required, while avoiding false `ok` matches inside words like `hook`.
+- Validation:
+  - `python3 -m py_compile hooks/*.py tests/smoke_test.py`: pass.
+  - `python3 tests/smoke_test.py`: pass, 167/167.
+  - PROJECT_SPEC task-id preservation check: TASK-001 through TASK-029 all present after TASK-029 completion update.
+- GitHub status:
+  - local validation only; no push/tag/release was requested in the current turn.
+
+## TASK-030 v3.0 release preflight (2026-06-04)
+- Result: current-turn GitHub release authorization reconciled through controlled Spec Steward flow.
+- Scope:
+  - GitHub Sync Policy was added for this current turn only.
+  - Authorized repository: `yunhaichu/Codex-SpecPilot`.
+  - Authorized actions: commit validated v3.0 changes, push `origin/main`, create annotated tag `v3.0`, and create GitHub release `v3.0`.
+- Validation:
+  - `python3 -m py_compile hooks/*.py tests/smoke_test.py`: pass.
+  - `python3 tests/smoke_test.py`: pass, 167/167.
+  - PROJECT_SPEC task-id preservation check: TASK-001 through TASK-030 all present after release-policy reconciliation.
+- Secret status:
+  - No API key, token, private key, password, or credential secret was requested, written, printed, or stored.

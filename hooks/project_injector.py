@@ -28,6 +28,7 @@ HOOK_FILES = (
     "codex_client.py",
     "evidence_reconciler.py",
     "mission_snapshot.py",
+    "maintenance_authorization.py",
     "permission_policy.py",
     "phase_contract.py",
     "pre_tool_guard.py",
@@ -37,6 +38,7 @@ HOOK_FILES = (
     "spec_steward.py",
     "status_normalizer.py",
     "stop_judge.py",
+    "task_intent.py",
     "user_prompt_submit.py",
 )
 

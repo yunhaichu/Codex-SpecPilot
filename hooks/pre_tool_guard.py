@@ -14,6 +14,7 @@ from permission_policy import (load_project_mode, is_supervision_file,
     command_has_write_intent)
 from codex_client import call_codex_default
 from project_paths import wiki_dir
+import maintenance_authorization
 
 REASON_TEMPLATE = "Blocked by Codex SpecPilot: %s"
 
@@ -33,6 +34,19 @@ def _log_deny(cmd, reason):
     os.makedirs(WIKI_DIR, exist_ok=True)
     entry = {"timestamp": datetime.now(timezone.utc).isoformat(),
               "command": cmd, "reason": reason}
+    with open(GUARD_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _log_allow(cmd, reason):
+    """Append an allow entry for auditable exceptional maintenance paths."""
+    os.makedirs(WIKI_DIR, exist_ok=True)
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "command": cmd,
+        "reason": reason,
+        "decision": "allow",
+    }
     with open(GUARD_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
@@ -264,6 +278,17 @@ def pre_tool_use(turn_payload):
 
     blocked, reason = _check_judge_system_boundary(file_paths, project_spec)
     if blocked:
+        lease = maintenance_authorization.consume_matching_lease(
+            file_paths,
+            command=command or tool_name,
+            wiki_dir=WIKI_DIR,
+        )
+        if lease.get("allowed"):
+            _log_allow(
+                command or tool_name,
+                "protected maintenance lease consumed: %s" % lease.get("lease_id", ""),
+            )
+            return {}
         _log_deny(command or tool_name, reason)
         return {"hookSpecificOutput": {
             "hookEventName": "PreToolUse",

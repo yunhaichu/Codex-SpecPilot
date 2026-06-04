@@ -28,7 +28,7 @@ def test(name, condition, detail=""):
     else:
         print("  FAIL: %s" % name)
         if detail:
-            print("              %s" % detail)
+            print("              %s" % (detail,))
         FAILED += 1
 
 
@@ -85,12 +85,47 @@ def test_user_prompt_submit():
     test("injects SpecPilot context", "Codex SpecPilot" in ctx)
     test("injects start-work instruction", "开始工作" in ctx or "Start Work" in ctx)
     test("injects goal-change rule", "Goal Change Rule" in ctx)
+    test("dedupes dynamic goal-change rule",
+         ctx.count("Goal Change Rule") == 1,
+         ctx[:2000])
+    test("dedupes base active-snapshot rule when dynamic snapshot exists",
+         "### Active Mission Snapshot ###" in ctx
+         and "Active Mission Snapshot Rule" not in ctx,
+         ctx[:2000])
+    test("dedupes active-snapshot injected heading",
+         ctx.count("### Active Mission Snapshot ###") == 1
+         and "\n## Active Mission Snapshot" not in ctx,
+         ctx[:2000])
     test("context stays short", len(ctx) <= 6000, "length=%d" % len(ctx))
 
     child = _run_hook("user_prompt_submit.py", child=True)
     test("child user prompt hook is no-op", json.loads(child.stdout) == {})
 
     user_prompt = _load_hook_module("user_prompt_submit")
+    task_intent = _load_hook_module("task_intent")
+    hook_question_intent = task_intent.build_prompt_intent(
+        "现在hook 的内容为什么有重复，你看一下",
+        latest_context="VERDICT: spec_update_required\n",
+    )
+    test("hook question is not mistaken for ok confirmation",
+         hook_question_intent.get("intent") == "conversation"
+         and hook_question_intent.get("requires_confirmation") is False,
+         hook_question_intent)
+    confirmation_intent = task_intent.build_prompt_intent(
+        "同意",
+        latest_context="VERDICT: spec_update_required\n",
+    )
+    test("explicit spec-update confirmation uses full task context",
+         confirmation_intent.get("intent") == "development",
+         confirmation_intent)
+    phase_transition_intent = task_intent.build_prompt_intent(
+        "你需要确保不同阶段过渡都自动确认，hook 需要对所有对话反馈",
+        latest_context="",
+    )
+    test("phase-transition automation directive is development intent",
+         phase_transition_intent.get("intent") == "development"
+         and phase_transition_intent.get("requires_confirmation") is False,
+         phase_transition_intent)
     old_wiki = user_prompt.WIKI_DIR
     with tempfile.TemporaryDirectory() as td:
         wiki = os.path.join(td, ".project_wiki")
@@ -259,6 +294,153 @@ def test_pre_tool_guard_light_boundary():
     test("child pre-tool hook is no-op", json.loads(child.stdout) == {})
 
 
+def test_protected_maintenance_authorization_lease():
+    print("\n[Protected maintenance authorization]")
+    pre = _load_hook_module("pre_tool_guard")
+    user_prompt = _load_hook_module("user_prompt_submit")
+    maintenance = _load_hook_module("maintenance_authorization")
+    old_call = pre.call_codex_default
+    old_pre_wiki = pre.WIKI_DIR
+    old_guard_log = pre.GUARD_LOG
+    old_project_spec = pre.PROJECT_SPEC_PATH
+    old_user_wiki = user_prompt.WIKI_DIR
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            wiki = os.path.join(td, ".project_wiki")
+            os.makedirs(wiki)
+            pre.WIKI_DIR = wiki
+            pre.GUARD_LOG = os.path.join(wiki, "guard_log.jsonl")
+            pre.PROJECT_SPEC_PATH = os.path.join(wiki, "PROJECT_SPEC.md")
+            user_prompt.WIKI_DIR = wiki
+            with open(pre.PROJECT_SPEC_PATH, "w", encoding="utf-8") as f:
+                f.write("# Spec\nsupervised_project_development\n")
+            with open(os.path.join(wiki, "INJECTION.md"), "w", encoding="utf-8") as f:
+                f.write("# Codex SpecPilot\n")
+            with open(os.path.join(wiki, "latest_context.md"), "w", encoding="utf-8") as f:
+                f.write(
+                    "VERDICT: spec_update_required\n"
+                    "NEXT_ACTION: Protected maintenance PreToolUse needs one-shot "
+                    "authorization for hooks/codex_client.py and tests/smoke_test.py.\n"
+                )
+
+            pre.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": '{"decision":"deny","reason":"should not reach soft judge"}',
+            }
+            injected = user_prompt.user_prompt_submit({"prompt": "同意"})
+            ctx = injected.get("hookSpecificOutput", {}).get("additionalContext", "")
+            leases = maintenance.load_leases(wiki)
+            test("user confirmation creates protected maintenance lease",
+                 len(leases) == 1
+                 and "hooks/codex_client.py" in leases[0].get("target_paths", [])
+                 and "tests/smoke_test.py" in leases[0].get("target_paths", [])
+                 and "Protected Maintenance Lease" in ctx,
+                 (leases, ctx[:1000]))
+
+            allowed = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: hooks/codex_client.py\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** Update File: tests/smoke_test.py\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ),
+                },
+            })
+            test("matching protected maintenance patch is allowed once",
+                 allowed == {}, allowed)
+
+            second = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: hooks/codex_client.py\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ),
+                },
+            })
+            test("consumed protected maintenance lease is not reusable",
+                 second.get("hookSpecificOutput", {}).get("permissionDecision") == "deny",
+                 second)
+
+            fresh = maintenance.create_maintenance_lease(
+                ["hooks/codex_client.py"],
+                reason="test one-shot maintenance",
+                prompt_text="允许",
+                wiki_dir=wiki,
+            )
+            mixed = pre.pre_tool_use({
+                "tool": "apply_patch",
+                "tool_input": {
+                    "command": (
+                        "*** Begin Patch\n"
+                        "*** Update File: hooks/codex_client.py\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** Update File: src/main.py\n"
+                        "@@\n"
+                        "+x\n"
+                        "*** End Patch\n"
+                    ),
+                },
+            })
+            test("maintenance lease does not allow mixed business-file writes",
+                 fresh.get("created")
+                 and mixed.get("hookSpecificOutput", {}).get("permissionDecision") == "deny",
+                 (fresh, mixed))
+
+            no_path = maintenance.create_lease_from_prompt(
+                "同意",
+                latest_context="Protected maintenance authorization is required.",
+                wiki_dir=wiki,
+            )
+            protected_spec = maintenance.create_lease_from_prompt(
+                "同意",
+                latest_context=(
+                    "Protected maintenance authorization is required for "
+                    ".project_wiki/PROJECT_SPEC.md."
+                ),
+                wiki_dir=wiki,
+            )
+            test("lease creation requires explicit allowed maintenance paths",
+                 no_path.get("created") is False and protected_spec.get("created") is False,
+                 (no_path, protected_spec))
+
+            rejected = maintenance.create_lease_from_prompt(
+                "不同意，不要写 token",
+                latest_context=(
+                    "Protected maintenance authorization is required for "
+                    "hooks/codex_client.py."
+                ),
+                wiki_dir=wiki,
+            )
+            ambiguous = maintenance.create_lease_from_prompt(
+                "可以吧",
+                latest_context=(
+                    "Protected maintenance authorization is required for "
+                    "hooks/codex_client.py."
+                ),
+                wiki_dir=wiki,
+            )
+            test("rejected or ambiguous authorization does not create lease",
+                 rejected.get("created") is False and ambiguous.get("created") is False,
+                 (rejected, ambiguous))
+    finally:
+        pre.call_codex_default = old_call
+        pre.WIKI_DIR = old_pre_wiki
+        pre.GUARD_LOG = old_guard_log
+        pre.PROJECT_SPEC_PATH = old_project_spec
+        user_prompt.WIKI_DIR = old_user_wiki
+
+
 def test_stop_auto_continue_and_done_helpers():
     print("\n[Stop]")
     stop = _load_hook_module("stop_judge")
@@ -402,6 +584,55 @@ def test_stop_auto_continue_and_done_helpers():
 
     child = _run_hook("stop_judge.py", child=True)
     test("child stop hook is no-op", json.loads(child.stdout) == {})
+
+
+def test_stop_conversation_mode_records_pass():
+    print("\n[Stop conversation mode]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        for name, content in {
+            "PROJECT_SPEC.md": _complete_project_spec(
+                "- [ ] TASK-001: Build app",
+                "- Tests pass.",
+            ),
+            "latest_context.md": "# Latest\nVERDICT: pass\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":1,"auto_continue":true}',
+            "prompt_intent.json": json.dumps({
+                "intent": "conversation",
+                "complexity": "simple",
+                "requires_confirmation": False,
+            }),
+        }.items():
+            with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                f.write(content)
+        try:
+            called = {"value": False}
+
+            def fake_call(prompt, timeout=120):
+                called["value"] = True
+                return {"ok": True, "content": "{}"}
+
+            stop.call_codex_default = fake_call
+            result = stop.stop_judge({
+                "last_assistant_message": "这是对 hook 重复内容的解释。"
+            })
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
+            test("conversation mode bypasses stop AI judge",
+                 called["value"] is False
+                 and data.get("last_verdict") == "pass",
+                 (called, data, result))
+            test("conversation mode records lightweight feedback",
+                 "Conversation prompt handled" in ctx
+                 and result.get("systemMessage", "").startswith("SpecPilot conversation mode"),
+                 (ctx, result))
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
 
 
 def test_stop_experience_evaluation_gate():
@@ -701,6 +932,7 @@ def test_stop_spec_update_required_pauses_worker():
     stop = _load_hook_module("stop_judge")
     old_call = stop.call_codex_default
     old_wiki = stop.WIKI_DIR
+    old_update = stop.spec_steward.propose_spec_update
     captured = {}
     with tempfile.TemporaryDirectory() as td:
         stop.WIKI_DIR = td
@@ -735,6 +967,19 @@ def test_stop_spec_update_required_pauses_worker():
                 }
 
             stop.call_codex_default = fake_call
+            def fake_update(change_request, apply_update=False):
+                captured["change_request"] = change_request
+                captured["apply_update"] = apply_update
+                return {
+                    "ok": True,
+                    "applied": True,
+                    "decision": "apply",
+                    "reason": "auto phase transition update",
+                    "questions": [],
+                    "update_summary": "Updated Development Plan automatically.",
+                }
+
+            stop.spec_steward.propose_spec_update = fake_update
             result = stop.stop_judge({
                 "last_assistant_message": (
                     "The user changed the project scope. I did not edit code."
@@ -746,24 +991,32 @@ def test_stop_spec_update_required_pauses_worker():
             loop = json.load(open(os.path.join(td, "loop_state.json"), encoding="utf-8"))
             test("stop prompt exposes spec_update_required verdict",
                  "spec_update_required" in prompt, prompt[:1000])
-            test("spec update does not auto-continue",
-                 "decision" not in result and data.get("auto_continue") is False,
+            test("spec update with questions auto-applies for complete task book",
+                 captured.get("apply_update") is True
+                 and "JUDGE_QUESTIONS_IGNORED_BY_AUTOMATION_POLICY" in captured.get("change_request", ""),
+                 captured)
+            test("auto-applied spec update continues worker flow",
+                 result.get("decision") == "block" and data.get("auto_continue") is True,
                  (result, data))
-            test("spec update is recorded in latest context",
-                 "VERDICT: spec_update_required" in ctx
-                 and "AUTO_CONTINUE: disabled" in ctx
-                 and "Which acceptance criteria changed?" in ctx,
+            test("spec update records continue after controlled auto apply",
+                 "VERDICT: continue" in ctx
+                 and "Spec Steward applied" in ctx
+                 and "AUTO_CONTINUE: enabled" in ctx
+                 and "Which acceptance criteria changed?" not in ctx,
                  ctx)
-            test("spec update resets loop state",
-                 loop.get("loop_count") == 0 and loop.get("last_verdict") == "spec_update_required",
+            test("auto-applied spec update enables loop state",
+                 loop.get("loop_count") == 0
+                 and loop.get("last_verdict") == "continue"
+                 and loop.get("auto_continue") is True,
                  loop)
-            test("spec update questions are shown to the user",
-                 "Questions for the user" in result.get("systemMessage", "")
-                 and "Which acceptance criteria changed?" in result.get("systemMessage", ""),
+            test("spec update questions are not shown to the user",
+                 "Questions for the user" not in result.get("reason", "")
+                 and "Which acceptance criteria changed?" not in result.get("reason", ""),
                  result)
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
+            stop.spec_steward.propose_spec_update = old_update
 
 
 def test_stop_spec_update_required_applies_when_sufficient():
@@ -824,17 +1077,104 @@ def test_stop_spec_update_required_applies_when_sufficient():
                  captured.get("apply_update") is True
                  and "Add TASK-002" in captured.get("change_request", ""),
                  captured)
-            test("applied spec update records pass state",
-                 data.get("last_verdict") == "pass"
-                 and data.get("auto_continue") is False
+            test("applied spec update records continue state",
+                 data.get("last_verdict") == "continue"
+                 and data.get("auto_continue") is True
                  and "Spec Steward applied" in data.get("reason", ""),
                  data)
             test("applied spec update updates latest context",
-                 "VERDICT: pass" in ctx and "Spec Steward applied" in ctx,
+                 "VERDICT: continue" in ctx
+                 and "AUTO_CONTINUE: enabled" in ctx
+                 and "Spec Steward applied" in ctx,
                  ctx)
-            test("applied spec update returns system message",
-                 "controlled Spec Steward flow" in result.get("systemMessage", ""),
+            test("applied spec update returns auto-continue block",
+                 result.get("decision") == "block"
+                 and "updated Active Mission Snapshot" in result.get("reason", ""),
                  result)
+        finally:
+            stop.call_codex_default = old_call
+            stop.WIKI_DIR = old_wiki
+            stop.spec_steward.propose_spec_update = old_update
+
+
+def test_stop_spec_update_steward_questions_auto_revise():
+    print("\n[Stop spec update auto revise]")
+    stop = _load_hook_module("stop_judge")
+    old_call = stop.call_codex_default
+    old_wiki = stop.WIKI_DIR
+    old_update = stop.spec_steward.propose_spec_update
+    with tempfile.TemporaryDirectory() as td:
+        stop.WIKI_DIR = td
+        for name, content in {
+            "PROJECT_SPEC.md": _complete_project_spec(
+                "- [ ] TASK-001: Build app",
+                "- Tests pass.",
+            ),
+            "latest_context.md": "# Latest\n",
+            "JUDGE.md": "# Judge\n",
+            "loop_state.json": '{"loop_count":1,"auto_continue":true}',
+        }.items():
+            with open(os.path.join(td, name), "w", encoding="utf-8") as f:
+                f.write(content)
+
+        try:
+            stop.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "verdict": "spec_update_required",
+                    "reason": "phase handoff needs next Development Plan",
+                    "next_action": "Create next phase plan from completed evidence.",
+                    "auto_continue": False,
+                    "progress_made": True,
+                    "questions": [],
+                }),
+            }
+            stop.spec_steward.propose_spec_update = lambda change_request, apply_update=False: {
+                "ok": True,
+                "applied": False,
+                "decision": "needs_user_confirmation",
+                "reason": "Need the next phase scope.",
+                "questions": ["Which next phase should be started?"],
+                "update_summary": "",
+            }
+            result = stop.stop_judge({
+                "last_assistant_message": "TASK-001 is complete; move to next phase."
+            })
+            data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
+            test("steward questions become automatic revise",
+                 result.get("decision") == "block"
+                 and data.get("last_verdict") == "revise"
+                 and data.get("auto_continue") is True,
+                 (result, data))
+            test("steward questions are not surfaced to user",
+                 "Which next phase" not in ctx
+                 and "Do not ask the user" in ctx,
+                 ctx)
+
+            with open(os.path.join(td, "loop_state.json"), "w", encoding="utf-8") as f:
+                f.write('{"loop_count":1,"auto_continue":true}')
+            stop.spec_steward.propose_spec_update = lambda change_request, apply_update=False: {
+                "ok": False,
+                "applied": False,
+                "decision": "reject",
+                "reason": "Spec Steward AI returned unparseable JSON.",
+                "questions": ["Should the next phase be created?"],
+            }
+            failed_result = stop.stop_judge({
+                "last_assistant_message": "TASK-001 is complete; create the next phase."
+            })
+            failed_data = json.load(open(os.path.join(td, "judge_latest.json"), encoding="utf-8"))
+            failed_ctx = open(os.path.join(td, "latest_context.md"), encoding="utf-8").read()
+            test("steward failure becomes automatic revise",
+                 failed_result.get("decision") == "block"
+                 and failed_data.get("last_verdict") == "revise"
+                 and failed_data.get("auto_continue") is True,
+                 (failed_result, failed_data))
+            test("steward failure questions are not surfaced to user",
+                 "Should the next phase" not in failed_ctx
+                 and "Recover automatically" in failed_ctx,
+                 failed_ctx)
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
@@ -846,6 +1186,7 @@ def test_stop_github_sync_policy_gate():
     stop = _load_hook_module("stop_judge")
     old_call = stop.call_codex_default
     old_wiki = stop.WIKI_DIR
+    old_update = stop.spec_steward.propose_spec_update
 
     def project_spec(policy_text):
         return (
@@ -899,6 +1240,38 @@ def test_stop_github_sync_policy_gate():
                  data.get("last_verdict") == "human_review"
                  and "local-only" in data.get("reason", ""),
                  (result, data))
+
+            captured = {}
+            stop.spec_steward.propose_spec_update = lambda change_request, apply_update=True: captured.update({
+                "change_request": change_request,
+                "apply_update": apply_update,
+            }) or {
+                "ok": True,
+                "applied": True,
+                "decision": "apply",
+                "reason": "policy reconciled",
+                "questions": [],
+                "update_summary": "Reconciled GitHub Sync Policy with current release authorization.",
+            }
+            snapshot_conflict = (
+                "## Active Mission Snapshot\n"
+                "- Current GitHub Policy: User confirmed GitHub push, tag, and release for v2.6.\n"
+                "- Current Release Target: v2.6\n\n"
+                + local_only
+            )
+            result, data = run_case(
+                wiki,
+                snapshot_conflict,
+                "Create GitHub release v2.6, tag it, and push to GitHub.",
+            )
+            test("snapshot/local-only GitHub conflict routes to Spec Steward",
+                 data.get("last_verdict") == "continue"
+                 and data.get("auto_continue") is True
+                 and result.get("decision") == "block"
+                 and captured.get("apply_update") is True
+                 and "GitHub policy reconciliation required" in captured.get("change_request", ""),
+                 (result, data, captured))
+            stop.spec_steward.propose_spec_update = old_update
 
             result, data = run_case(wiki, "", "Create GitHub release tag.")
             test("missing GitHub policy blocks remote action",
@@ -957,6 +1330,7 @@ def test_stop_github_sync_policy_gate():
         finally:
             stop.call_codex_default = old_call
             stop.WIKI_DIR = old_wiki
+            stop.spec_steward.propose_spec_update = old_update
 
 
 def test_stop_onboarding_steward_writes_spec():
@@ -1177,6 +1551,21 @@ def test_spec_steward_controlled_update_flow():
                  ask)
 
             steward.call_codex_default = lambda prompt, timeout=120: {
+                "ok": False,
+                "error": "codex exec timed out after 120 seconds",
+            }
+            runtime_blocked = steward.propose_spec_update(
+                "Apply the confirmed PROJECT_SPEC update.",
+                apply_update=True,
+            )
+            test("spec steward runtime failure requests protected maintenance authorization",
+                 runtime_blocked.get("decision") == "maintenance_authorization_required"
+                 and runtime_blocked.get("applied") is False
+                 and "hooks/codex_client.py" in runtime_blocked.get("maintenance_targets", [])
+                 and runtime_blocked.get("questions"),
+                 runtime_blocked)
+
+            steward.call_codex_default = lambda prompt, timeout=120: {
                 "ok": True,
                 "content": json.dumps({
                     "decision": "apply",
@@ -1190,6 +1579,30 @@ def test_spec_steward_controlled_update_flow():
             test("spec steward rejects incomplete proposed spec",
                  bad.get("ok") is False and "missing" in bad,
                  bad)
+
+            steward.call_codex_default = lambda prompt, timeout=120: {
+                "ok": True,
+                "content": json.dumps({
+                    "decision": "apply",
+                    "reason": "bad plan truncation",
+                    "questions": [],
+                    "update_summary": "Replace plan but accidentally drop TASK-001.",
+                    "updated_project_spec": "",
+                    "project_spec_patches": [{
+                        "op": "replace",
+                        "heading": "Development Plan",
+                        "content": "## 7. Development Plan\n- [ ] TASK-002: Add confirmed offline search\n",
+                    }],
+                }),
+            }
+            dropped_task = steward.propose_spec_update(
+                "Mark TASK-002 but do not delete any historical tasks.",
+                apply_update=True,
+            )
+            test("spec steward rejects task-id dropping section patch",
+                 dropped_task.get("ok") is False
+                 and "dropped existing task id: TASK-001" in dropped_task.get("missing", []),
+                 dropped_task)
 
             fake_fine_grained_token = "github_pat_" + "1234567890abcdefghijklmnopqrstuvwxyz"
             secret_spec = updated_spec.replace(
@@ -1388,6 +1801,8 @@ def test_active_mission_snapshot_goal_drift_and_context_budget():
             test("prompt injection keeps snapshot before truncation",
                  "### Active Mission Snapshot ###" in ctx
                  and "TASK-014 through TASK-023" in ctx
+                 and ctx.count("### Active Mission Snapshot ###") == 1
+                 and "\n## Active Mission Snapshot" not in ctx
                  and len(ctx) <= user_prompt.MAX_CONTEXT_CHARS,
                  ctx[:1200])
     finally:
@@ -1957,12 +2372,15 @@ def main():
     print("=== Codex SpecPilot Light Smoke Tests ===")
     test_user_prompt_submit()
     test_pre_tool_guard_light_boundary()
+    test_protected_maintenance_authorization_lease()
     test_stop_auto_continue_and_done_helpers()
+    test_stop_conversation_mode_records_pass()
     test_stop_experience_evaluation_gate()
     test_stop_prompt_keeps_development_plan_context()
     test_stop_loop_limit_counts_stalled_work_only()
     test_stop_spec_update_required_pauses_worker()
     test_stop_spec_update_required_applies_when_sufficient()
+    test_stop_spec_update_steward_questions_auto_revise()
     test_stop_github_sync_policy_gate()
     test_stop_onboarding_steward_writes_spec()
     test_stop_incomplete_project_spec_enters_onboarding()

@@ -1,6 +1,7 @@
 """UserPromptSubmit hook - injects short task-loop context into Codex prompts."""
 import json
 import os
+import re
 import sys
 
 # Recursive guard: skip if child Codex process
@@ -12,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from project_paths import wiki_dir
 from project_injector import ensure_runtime_files
 from mission_snapshot import extract_active_mission_snapshot
+import maintenance_authorization
+import task_intent
 
 WIKI_DIR = wiki_dir()
 
@@ -73,6 +76,18 @@ push/tag/release/checkpoint operations Hook may request automatically versus
 only after human confirmation.
 """
 
+CONVERSATION_MODE_RULE = """
+
+### Conversation Mode ###
+The current prompt is classified as a normal question or discussion, not a
+request to start or continue the Development Plan. Answer directly using the
+current project facts if relevant. Do not start worker development, do not run
+the full task loop, do not request a PROJECT_SPEC update, and do not ask the
+user for task-contract confirmation unless the user clearly asks to change the
+goal, plan, scope, release target, or acceptance criteria.
+The Stop Hook should record a lightweight pass judgment for this conversation.
+"""
+
 
 def _read_file(rel_path):
     path = os.path.join(WIKI_DIR, rel_path)
@@ -93,6 +108,47 @@ def _truncate(text):
         suffix = "\n\n[TRUNCATED BY Codex SpecPilot: injection context exceeded limit]"
         return text[:MAX_CONTEXT_CHARS - len(suffix)] + suffix
     return text
+
+
+def _remove_markdown_section(text, heading_title):
+    """Remove one level-2 markdown section by exact heading title."""
+    if not text:
+        return text
+    pattern = re.compile(
+        r"(?m)^##\s+%s\s*$" % re.escape(heading_title)
+    )
+    match = pattern.search(text)
+    if not match:
+        return text
+    next_heading = re.search(r"(?m)^##\s+\S.*$", text[match.end():])
+    end = len(text) if not next_heading else match.end() + next_heading.start()
+    return (text[:match.start()].rstrip() + "\n\n" + text[end:].lstrip()).strip()
+
+
+def _dedupe_base_context(context, has_active_snapshot):
+    """Drop base sections already injected as dynamic high-priority context."""
+    deduped = context or ""
+    deduped = _remove_markdown_section(deduped, "Goal Change Rule")
+    if has_active_snapshot:
+        deduped = _remove_markdown_section(deduped, "Active Mission Snapshot Rule")
+    return deduped
+
+
+def _format_active_mission_snapshot(snapshot):
+    """Format the dynamic snapshot without repeating the markdown heading."""
+    if not snapshot:
+        return ""
+    body = re.sub(
+        r"(?im)^##+\s+(?:\d+\.\s*)?Active Mission Snapshot\s*\n?",
+        "",
+        snapshot,
+        count=1,
+    ).strip()
+    return (
+        "\n\n### Active Mission Snapshot ###\n"
+        "Use this as the current-goal anchor before historical summaries.\n"
+        "%s\n" % body
+    )
 
 
 def _inject_start_work_prompt(prompt_text, onboarding_required=False):
@@ -154,6 +210,11 @@ def user_prompt_submit(turn_payload):
     _ensure_project_wiki_files()
 
     latest_context = _read_file(LATEST_CTX_FILE)
+    prompt_intent = task_intent.build_prompt_intent(
+        prompt_text,
+        latest_context=latest_context or "",
+    )
+    task_intent.save_prompt_intent(prompt_intent, WIKI_DIR)
     if os.path.isfile(os.path.join(WIKI_DIR, PRIMARY_FILE)):
         context = _read_file(PRIMARY_FILE)
     else:
@@ -167,12 +228,9 @@ def user_prompt_submit(turn_payload):
     dynamic_context = ""
     project_spec = _read_file(PROJECT_SPEC_FILE)
     snapshot = extract_active_mission_snapshot(project_spec or "")
+    context = _dedupe_base_context(context, has_active_snapshot=bool(snapshot))
     if snapshot:
-        dynamic_context += (
-            "\n\n### Active Mission Snapshot ###\n"
-            "Use this as the current-goal anchor before historical summaries.\n"
-            "%s\n" % snapshot
-        )
+        dynamic_context += _format_active_mission_snapshot(snapshot)
     needs_onboarding = _project_spec_needs_onboarding()
     if needs_onboarding:
         dynamic_context += ONBOARDING_RULE
@@ -182,6 +240,46 @@ def user_prompt_submit(turn_payload):
     dynamic_context += GOAL_CHANGE_RULE
     if latest_context is not None:
         dynamic_context += "\n--- Latest Judge Context ---\n" + latest_context
+    lease_result = maintenance_authorization.create_lease_from_prompt(
+        prompt_text,
+        latest_context=latest_context or "",
+        wiki_dir=WIKI_DIR,
+    )
+    if lease_result.get("created"):
+        lease = lease_result.get("lease", {})
+        dynamic_context += (
+            "\n\n### Protected Maintenance Lease ###\n"
+            "A one-shot protected maintenance lease was created from the user's "
+            "confirmation. Target files: %s. It expires at %s and is consumed by "
+            "the next matching protected write.\n"
+            % (
+                ", ".join(lease.get("target_paths", [])),
+                lease.get("expires_at", "(unknown)"),
+            )
+        )
+    if prompt_intent.get("intent") == "conversation" and not needs_onboarding:
+        conversation_context = ""
+        if snapshot:
+            conversation_context += _format_active_mission_snapshot(snapshot)
+        conversation_context += CONVERSATION_MODE_RULE
+        conversation_context += (
+            "\n--- Prompt Intent ---\n"
+            "intent: %s\ncomplexity: %s\nrequires_confirmation: %s\n"
+            % (
+                prompt_intent.get("intent"),
+                prompt_intent.get("complexity"),
+                str(prompt_intent.get("requires_confirmation")).lower(),
+            )
+        )
+        if lease_result.get("created"):
+            conversation_context += dynamic_context.split("### Protected Maintenance Lease ###", 1)[-1]
+        context = _truncate(conversation_context)
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": context,
+            }
+        }
     start_end_prompt = _inject_start_work_prompt(prompt_text, onboarding_required=needs_onboarding)
     dynamic_context += start_end_prompt
     context = dynamic_context + "\n--- SpecPilot Base Context ---\n" + context

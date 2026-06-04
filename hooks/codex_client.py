@@ -5,7 +5,11 @@ Child Codex inherits parent default model and configuration.
 """
 import json
 import os
+import queue
+import signal
 import subprocess
+import threading
+import time
 from datetime import datetime, timezone
 try:
     from project_paths import wiki_dir
@@ -16,6 +20,86 @@ WIKI_DIR = wiki_dir()
 
 LOOP_STATE_PATH = os.path.join(WIKI_DIR, "loop_state.json")
 MAX_LOOP_COUNT = 3
+
+
+def _read_stream_lines(stream, stream_name, output_queue):
+    try:
+        for line in iter(stream.readline, ""):
+            output_queue.put((stream_name, line))
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _drain_output_queue(output_queue, stdout_lines, stderr_lines):
+    while True:
+        try:
+            stream_name, line = output_queue.get_nowait()
+        except queue.Empty:
+            return
+        if stream_name == "stdout":
+            stdout_lines.append(line)
+        else:
+            stderr_lines.append(line)
+
+
+def _terminate_process(proc, grace_seconds=2.0):
+    if proc.poll() is not None:
+        return
+
+    if os.name != "nt":
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except Exception:
+            proc.terminate()
+    else:
+        proc.terminate()
+
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return
+        time.sleep(0.05)
+
+    if proc.poll() is not None:
+        return
+
+    if os.name != "nt":
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except Exception:
+            proc.kill()
+    else:
+        proc.kill()
+
+    try:
+        proc.wait(timeout=1)
+    except Exception:
+        pass
+
+
+def _parse_agent_message(line):
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    item = event.get("item", {})
+    if (
+        event.get("type") == "item.completed"
+        and isinstance(item, dict)
+        and item.get("type") == "agent_message"
+    ):
+        return item.get("text", "").strip()
+    return None
+
 
 
 def _profile_from_env():
@@ -81,31 +165,76 @@ def call_codex_default(prompt, timeout=120):
             text=True,
             cwd=WIKI_DIR,
             env=env,
+            start_new_session=(os.name != "nt"),
         )
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            stdout, stderr = proc.communicate(timeout=5)
-            return {
-                "ok": False,
-                "content": "",
-                "error": "codex exec timed out after %s seconds" % timeout,
-                "profile": profile,
-                "command_mode": command_mode,
-                "raw_stdout": (stdout or "")[-2000:],
-                "raw_stderr": (stderr or "")[-2000:],
-            }
+        output_queue = queue.Queue()
+        stdout_lines = []
+        stderr_lines = []
+        stdout_thread = threading.Thread(
+            target=_read_stream_lines,
+            args=(proc.stdout, "stdout", output_queue),
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=_read_stream_lines,
+            args=(proc.stderr, "stderr", output_queue),
+            daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+
+        deadline = time.monotonic() + timeout
+        while proc.poll() is None:
+            remaining = max(0.0, min(0.05, deadline - time.monotonic()))
+            try:
+                stream_name, line = output_queue.get(timeout=remaining)
+            except queue.Empty:
+                if time.monotonic() >= deadline:
+                    _terminate_process(proc)
+                    stdout_thread.join(timeout=0.5)
+                    stderr_thread.join(timeout=0.5)
+                    _drain_output_queue(output_queue, stdout_lines, stderr_lines)
+                    stdout = "".join(stdout_lines)
+                    stderr = "".join(stderr_lines)
+                    return {
+                        "ok": False,
+                        "content": "",
+                        "error": "codex exec timed out",
+                        "profile": profile,
+                        "command_mode": command_mode,
+                        "raw_stdout": stdout[-2000:],
+                        "raw_stderr": stderr[-2000:],
+                    }
+                continue
+
+            if stream_name == "stdout":
+                stdout_lines.append(line)
+                content = _parse_agent_message(line)
+                if content is not None:
+                    _terminate_process(proc)
+                    stdout_thread.join(timeout=0.5)
+                    stderr_thread.join(timeout=0.5)
+                    _drain_output_queue(output_queue, stdout_lines, stderr_lines)
+                    return {
+                        "ok": True,
+                        "content": content,
+                        "error": None,
+                        "profile": profile,
+                        "command_mode": command_mode,
+                    }
+            else:
+                stderr_lines.append(line)
+
+        stdout_thread.join(timeout=0.5)
+        stderr_thread.join(timeout=0.5)
+        _drain_output_queue(output_queue, stdout_lines, stderr_lines)
+        stdout = "".join(stdout_lines)
+        stderr = "".join(stderr_lines)
 
         stdout_lines = (stdout or "").splitlines(True)
         for line in stdout_lines:
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            item = event.get("item", {}) if isinstance(event, dict) else {}
-            if event.get("type") == "item.completed" and item.get("type") == "agent_message":
-                content = item.get("text", "").strip()
+            content = _parse_agent_message(line)
+            if content is not None:
                 return {
                     "ok": True,
                     "content": content,

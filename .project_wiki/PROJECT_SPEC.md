@@ -2,12 +2,12 @@
 
 ## Active Mission Snapshot
 - Current overall goal: Codex SpecPilot must remain a lightweight task-book-driven unattended development loop.
-- Current phase: Autonomous contract governance, evidence reconciliation, and goal anchoring.
-- Current phase goal: prevent long PROJECT_SPEC files and long histories from blurring the active development target, while allowing Hook/Spec Steward to reconcile evidence, update task status, and draft next-stage contracts without unnecessary user handoff.
-- Current task range: TASK-014 through TASK-023.
+- Current phase: v3.0 automatic phase-transition governance has completed local implementation and validation through TASK-029.
+- Current phase goal: Complete the current-turn explicitly authorized v3.0 GitHub release after validation, using the already-authenticated local GitHub CLI account `yunhaichu` for repository `yunhaichu/Codex-SpecPilot`.
+- Current task range: TASK-029 is complete and locally validated. The only currently authorized remaining work is release execution for v3.0: verify local state, commit validated v3.0 changes, push `origin/main`, create annotated tag `v3.0`, and create GitHub release `v3.0`.
 - Current non-goals: no RAG, no multi-agent platform, no graph database, no external scheduler, no cloud default, no credential storage, no complex workflow platform.
-- Current safety boundary: ordinary Worker must not directly edit task contracts or judge-system files; controlled Spec Steward/onboarding/spec update flows may update PROJECT_SPEC only for confirmed contract changes.
-- Current release target: validate, push to GitHub, tag, and publish v2.6 after TASK-014 through TASK-023 acceptance is satisfied.
+- Current safety boundary: ordinary Worker must not directly edit task contracts or judge-system files; controlled Spec Steward/onboarding/spec update flows may update PROJECT_SPEC only for confirmed contract changes. After a complete PROJECT_SPEC exists, controlled flows must not ask the user to reconfirm routine phase transitions, next-task activation, status reconciliation, experience-evaluation follow-up, or Development Plan carry-over.
+- Current release target: current-turn explicit GitHub release authorization for `v3.0` only, after validation. Use local authenticated `gh` account `yunhaichu` with repository `yunhaichu/Codex-SpecPilot`; do not request, write, print, or store any API key, token, private key, password, or credential secret.
 - Context priority: Active Mission Snapshot -> current phase -> current TASK -> acceptance criteria -> historical summaries/evidence.
 
 ## 0. Project Mode
@@ -69,7 +69,7 @@ Hook、Spec Steward 和 Stop Judge 在读取长任务书或紧凑上下文时，
 Active Mission Snapshot -> current Phase -> current TASK -> acceptance criteria -> historical summaries。
 如果历史总结、完成阶段或旧任务与当前 Active Mission Snapshot 冲突，应优先按当前目标锚点执行，并触发受控证据核对或合同修复。
 
-本阶段完成并通过验证后，SpecPilot 应按用户明确要求发布 `v2.6`。如果用户输入或上下文中出现 `vv2.6`，应按笔误处理为 `v2.6`。发布必须在验证通过后执行，并包括 commit、push 到 GitHub、创建 tag、发布 release；不得请求、保存或暴露任何 secret。
+如果用户在当前阶段再次明确要求发布，SpecPilot 应先通过受控 Spec Steward 对齐 GitHub Sync Policy 和发布目标，再执行验证、commit、push、tag 和 release；不得请求、保存或暴露任何 secret。历史上下文中的 `vv2.6` 仅作为 `v2.6` 笔误处理，不自动构成当前发布目标。
 
 ## 2. Background
 Codex 默认是一轮一轮被用户推动的交互工具。SpecPilot 的目标是让 Codex 在明确
@@ -172,7 +172,12 @@ Worker 流程转成可执行后续开发任务。
 - Hook 和状态文件中的状态枚举必须规范化，避免 `done`、`complete`、`finished`、`code-ready`、`real-world verified` 等概念混用导致错误推进。
 - SpecPilot 必须有上下文预算和阶段历史归档策略，确保长历史不会挤掉当前目标锚点、后段任务、验收标准、停止条件、GitHub 策略和提交要求。
 - 本阶段必须用 novelcreatepilot 或等价真实受监督项目做回归验证，证明 Active Mission Snapshot、目标锚定、证据闭环和长任务书策略在真实项目中有效。
-- 本阶段通过验证后，必须按用户确认的 GitHub 发布策略提交、推送、打 tag 并 release `v2.6`；`vv2.6` 统一视为 `v2.6`。
+- 本阶段默认只要求本地验证；只有用户在当前回合明确要求发布时，才通过受控 Spec Steward 对齐 GitHub 发布策略、tag/release 目标和自动操作权限；`vv2.6` 仅在该发布流程中按 `v2.6` 笔误处理。
+- 完整 `PROJECT_SPEC.md` 已形成后，SpecPilot 不得在不同阶段过渡、下一阶段计划、任务状态对账、体验测评后续任务或 Development Plan 衔接时反复要求用户确认；Stop Hook、Spec Steward 和 Worker 必须根据 `PROJECT_SPEC.md`、latest context、wiki evidence 和当前目标自动继续推进。
+- 只有项目创建初期 / onboarding 尚未形成完整 `PROJECT_SPEC.md`，且需求或目标信息不足时，才允许反复向用户确认需求和目标。
+- 普通对话、问答、说明、状态询问或非开发型交流不得被当成新任务启动；Hook 应为所有普通对话写入轻量反馈或轻量状态记录，避免沉默或误触发任务推进。
+- 当 TASK 已完成且 Development Plan 中存在明确后续工作，或体验测评发现可转入受控任务合同更新的后续任务时，SpecPilot 应自动生成或应用窄范围 section patch，并继续推进下一项授权任务，除非存在真实用户取舍、secret、外部动作、受保护范围授权或不可消除歧义。
+- Stop Hook 输出 `spec_update_required` 时，若所需变化可由现有 `PROJECT_SPEC.md`、latest context 和 wiki evidence 明确推出，Spec Steward 应直接应用受控 section patch；不得再把“是否进入下一阶段”作为确认问题交给用户。
 
 ## 4. Non-Goals
 - 不做完整 GH 平台。
@@ -225,7 +230,7 @@ Worker 流程转成可执行后续开发任务。
 
 为实现自主合同治理、证据闭环与目标锚定阶段，允许在上述范围内增加 Active Mission Snapshot、goal drift detection、section patch 更新、task evidence reconciliation、受控 Spec Steward 写入通道、phase closure / next phase draft、human_review taxonomy、status enum normalization、context budget / phase-history archive 策略和 novelcreatepilot 回归验证相关逻辑、测试和文档；不得引入 RAG、多 Agent 平台、图数据库、外层调度器、云默认或复杂流程编排。
 
-为发布 `v2.6`，允许在本阶段验证完成后按任务书策略执行 git commit、push、tag 和 GitHub release；不得写入、请求或暴露任何 credential secret。
+如果用户明确要求发布，允许在受控 GitHub Sync Policy 对齐且验证完成后按任务书策略执行 git commit、push、tag 和 GitHub release；不得写入、请求或暴露任何 credential secret。
 
 ## 6. Protected Scope
 Codex Worker 不能修改判断体系和监督状态文件，除非用户明确要求开发 SpecPilot
@@ -264,15 +269,15 @@ GitHub 同步策略属于任务合同内容，只能通过受控 Hook onboarding
 
 Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy、Submission Requirements、阶段关闭证据和下一阶段合同草案都属于任务合同治理内容，只能由受控 Hook / Spec Steward / spec update 流程写入或更新。普通 Codex Worker 不得绕过受控流程直接修改这些合同治理内容。
 
-## 7. Active Mission Snapshot
-- Current Phase: 自主合同治理、证据闭环与目标锚定
-- Current Release Target: v2.6（`vv2.6` 按笔误视为 `v2.6`）
-- Current Goal: 实现 Active Mission Snapshot/current goal anchor、目标漂移检测、长任务书 section patch 更新、任务证据核对、受控 Spec Steward 写入通道、阶段关闭和下一阶段合同草案、收窄 human_review、状态枚举规范、上下文预算与阶段历史归档，并通过 novelcreatepilot 回归验证。
-- Current TASK Range: TASK-014 through TASK-023
-- Current Acceptance Focus: Hook / Spec Steward / Stop Judge 在长任务书和历史阶段很多时，必须优先当前目标锚点和当前任务；历史完成阶段仅作为证据；证据、状态和任务完成声明冲突时必须核对或修复；TASK-014 到 TASK-023 验证已通过，进入 commit、push、tag、release `v2.6`。
-- Current GitHub Policy: 本阶段用户已明确要求验证后发布到 GitHub，允许在验证通过后 commit、push、tag 和 release `v2.6`；不得请求、保存或暴露 secret；凭据不可用或 GitHub 操作无法确认时进入 `human_review` 或标记 sync environment-blocked。
+## 7. Current Phase Snapshot Evidence
+- Current Phase: TASK-024 through TASK-027 已完成本地验证
+- Current Release Target: local validation for protected-maintenance repair flow; no new release is required unless the user explicitly asks.
+- Current Goal: 解决 019e8233 会话暴露的硬权限死锁：用户明确授权受保护 Hook 维护时，授权必须能通过受控租约传递给 PreToolUse；Spec Steward 自身故障时必须有有限维护修复通道；Active Snapshot 与正式 GitHub policy 冲突时必须进入受控策略修复，而不是只把问题交给用户。
+- Current TASK Range: TASK-024 through TASK-027
+- Current Acceptance Focus: 已验证用户确认可生成短时一次性租约，PreToolUse 只放行并消费租约指定维护文件，Spec Steward runtime blocked 会进入 `maintenance_authorization_required`，GitHub policy 与 Active Snapshot 冲突会进入受控 `spec_update_required` 策略修复。
+- Current GitHub Policy: 本阶段不要求新发布；如 Active Snapshot、Submission Requirements 或用户命令要求 GitHub 远端动作但正式 GitHub policy 为 local-only，Stop Hook 必须触发受控 policy reconciliation，而不是把远端动作当作普通 auto-continue。
 - Historical Phase Rule: TASK-001 through TASK-013 are completed historical evidence. They remain protected context and regression baseline, but they are not the current development goal.
-- Next Allowed Action: TASK-014 到 TASK-023 已通过基础验证和 novelcreatepilot 回归验证；下一步按用户确认策略 commit、push、tag 并发布 `v2.6`。
+- Next Allowed Action: TASK-028 已通过 `python3 tests/smoke_test.py`（155/155 passed）。当前没有新的开发任务；若用户要求发布新版本或新增下一阶段任务，先通过受控 Spec Steward 更新任务合同。
 
 ## 8. Development Plan
 - [x] TASK-001: 重新校准项目说明和注入规则
@@ -413,6 +418,48 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
   - Acceptance: 验证 Active Mission Snapshot 优先级、目标漂移检测、证据核对、section patch、受控写入、状态枚举、上下文预算和 release 前证据要求；记录 direct evidence；明确 code-ready、environment-blocked 或 real-world verified。
   - Notes: 不污染目标项目任务合同；如需要修改外部受监督项目合同，必须走该项目受控 Spec Steward 流程。
 
+- [x] TASK-024: Protected maintenance authorization lease
+  - Goal: 解决用户明确授权维护受保护 Hook 文件时仍被 PreToolUse 死锁的问题。
+  - Scope: `hooks/maintenance_authorization.py`, `hooks/user_prompt_submit.py`, `hooks/pre_tool_guard.py`, `hooks/permission_policy.py`, `tests/*`, `.project_wiki/INJECTION.md`, `.project_wiki/PROJECT_SPEC_TEMPLATE.md`, `README.md`
+  - Acceptance: 用户对精确受保护维护目标回复 `同意` / `允许` / `可以` 后，UserPromptSubmit 生成短时一次性维护租约；PreToolUse 只允许匹配租约的维护文件写入，消费后不可复用；混入业务文件、PROJECT_SPEC、判断日志、循环状态或 secret 时继续拒绝。
+  - Notes: Evidence: `test_protected_maintenance_authorization_lease` covers lease creation, one-shot consumption, non-reuse, mixed-file denial, missing-target denial, protected PROJECT_SPEC denial, rejection and ambiguous authorization denial.
+
+- [x] TASK-025: Spec Steward runtime blocked recovery path
+  - Goal: 当 Spec Steward 自身运行时调用失败时，不要求用户手动关闭 Hook 或手动改保护文件，而是进入受控维护修复流。
+  - Scope: `hooks/spec_steward.py`, `hooks/maintenance_authorization.py`, `hooks/stop_judge.py`, `tests/*`, docs/templates
+  - Acceptance: Spec Steward runtime failure returns `maintenance_authorization_required` with exact maintenance targets; Stop Hook records a bounded protected-maintenance next action; maintenance authorization still requires explicit user approval and a short-lived lease.
+  - Notes: Evidence: `test_spec_steward_controlled_update_flow` covers runtime failure returning protected maintenance authorization targets.
+
+- [x] TASK-026: Active Snapshot / GitHub policy reconciliation
+  - Goal: 当 Active Mission Snapshot 或 Submission Requirements 已明确 GitHub 发布/同步授权，但正式 GitHub Sync Policy 仍 local-only 或不完整时，进入受控 policy reconciliation，而不是普通 human_review 死停或直接远端操作。
+  - Scope: `hooks/stop_judge.py`, `hooks/mission_snapshot.py`, `tests/*`, docs/templates
+  - Acceptance: Stop Hook can detect snapshot/local-only conflict and invoke controlled Spec Steward apply; missing/incomplete policy, unavailable credentials, and human-confirmation policy remain fail-safe.
+  - Notes: Evidence: `test_stop_github_sync_policy_gate` covers snapshot/local-only policy reconciliation, missing policy, incomplete policy, unavailable credentials, human-confirmation blocking, and allowed auto push.
+
+- [x] TASK-027: Protected maintenance and policy repair validation
+  - Goal: 验证 TASK-024 through TASK-026 的受控维护、PreToolUse 租约消费和 GitHub policy repair 行为在本地闭环中可用。
+  - Scope: `tests/*`, `.project_wiki/PROJECT_SPEC.md`, `.project_wiki/INJECTION.md`, `.project_wiki/PROJECT_SPEC_TEMPLATE.md`, `README.md`
+  - Acceptance: 本地 smoke tests cover protected maintenance lease lifecycle, Spec Steward maintenance authorization, and GitHub policy reconciliation without storing secrets or enabling remote operations by default.
+  - Notes: Status: local validation complete; no GitHub release required unless explicitly requested.
+
+- [x] TASK-028: Hook context de-duplication
+  - Goal: 去掉 UserPromptSubmit 注入内容里的重复规则块，避免动态上下文和基础 INJECTION 重复消耗上下文窗口。
+  - Scope: `hooks/user_prompt_submit.py`, `tests/*`, `.project_wiki/PROJECT_SPEC.md`, `README.md` as needed
+  - Acceptance: 当动态 Active Mission Snapshot 已注入时，基础 `Active Mission Snapshot Rule` 不再重复进入 additionalContext；动态 `Goal Change Rule` 已注入时，基础 `Goal Change Rule` 不再重复进入 additionalContext；PROJECT_SPEC 只保留一个 canonical Active Mission Snapshot heading 或将第二份改为非 canonical evidence heading；测试覆盖去重后仍保留当前目标锚点、Goal Change Rule、Latest Judge Context 和 start-work/onboarding 规则。
+  - Notes: Evidence: `python3 tests/smoke_test.py` 155/155 passed; UserPromptSubmit output contains one dynamic `Goal Change Rule`, omits base `Active Mission Snapshot Rule` when a dynamic snapshot exists, and PROJECT_SPEC has one canonical `## Active Mission Snapshot` heading.
+
+- [x] TASK-029: 自动阶段过渡治理与 Worker 连续推进闭环
+  - Goal: 完成 v3.0 automatic phase-transition governance，使 Stop Hook、Spec Steward 和 Worker 在完整 PROJECT_SPEC 已存在时，能自动处理普通阶段过渡、下一任务激活、任务状态对账、体验测评后续任务和 Development Plan 衔接，不再反复要求用户确认。
+  - Scope: `hooks/stop_judge.py`, `hooks/spec_steward.py`, `hooks/task_intent.py`, `hooks/user_prompt_submit.py`, `hooks/permission_policy.py`, `tests/*`, `README.md`, `.project_wiki/INJECTION.md`, `.project_wiki/PROJECT_SPEC_TEMPLATE.md`, `.project_wiki/PROJECT_SPEC.md`
+  - Acceptance: Stop Hook 在 Spec Steward 成功应用受控合同更新后返回 `decision:block`、`VERDICT: continue`、`AUTO_CONTINUE: enabled`，Worker 会自动从更新后的 Active Mission Snapshot / Development Plan 继续；普通对话 conversation mode 会写入轻量 pass，避免沉默或误触发任务推进；Spec Steward `needs_user_confirmation` 或不可解析失败会转为自动 `revise`，要求 Worker 继续补齐证据或收窄 patch，而不是直接问用户；Spec Steward 现在拒绝会丢掉已有 TASK id 的 section patch；无新增 RAG、多 Agent 平台、图数据库、外层调度器、云默认或复杂流程编排。
+  - Evidence: TASK-029 已完成本地实现和验证。验证通过：`python3 -m py_compile hooks/*.py tests/smoke_test.py` pass；`python3 tests/smoke_test.py` pass 167/167 after Worker-flow auto-continue and task-id preservation changes; PROJECT_SPEC task-id preservation check confirms TASK-001 through TASK-029 all present.
+  - Notes: 当前无下一任务授权；release target 仍为 local validation only，除非用户在当前回合明确要求且 GitHub Sync Policy 已对齐，否则不执行 GitHub push/tag/release。
+- [ ] TASK-030: Execute current-turn v3.0 GitHub release
+  - Goal: Complete the user-authorized v3.0 publication after TASK-029 local validation.
+  - Scope: local validation commands, git status/diff review, git commit, `origin/main` push, annotated tag `v3.0`, GitHub release `v3.0`, README or completion notes only if needed for release accuracy.
+  - Acceptance: Confirm repository is `yunhaichu/Codex-SpecPilot`; confirm local GitHub CLI is already authenticated as `yunhaichu`; run required validation; commit validated v3.0 changes without reverting unrelated user changes; push `origin/main`; create annotated tag `v3.0`; create GitHub release `v3.0`; report commit, tag, release URL, and validation results.
+  - Notes: This is a current-turn explicit release authorization only. Do not request, write, print, or store secrets. Do not introduce RAG, multi-agent platforms, graph memory, external schedulers, cloud defaults, or complex workflow platforms. Preserve all existing TASK-001 through TASK-029 history and do not truncate the Development Plan.
+
 ## 9. Acceptance Criteria
 - 用户只输入一次 `开始工作` 后，Hook 能持续推动 Codex 继续开发或纠偏。
 - Stop Hook 能基于 AI 输出可靠处理 `continue | revise | done | human_review`。
@@ -454,7 +501,7 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
 - Hook、状态文件、完成报告和发布流程中的状态枚举必须规范化，并区分决策状态、验证状态和 GitHub sync 状态。
 - 上下文预算和阶段历史归档策略必须保留当前目标、后段任务、验收标准、停止条件、GitHub 策略和提交要求。
 - novelcreatepilot 或等价真实受监督项目回归验证必须覆盖本阶段目标锚定、证据闭环和长任务书策略。
-- 本阶段验证通过后，必须 commit、push 到 GitHub、创建 tag 并 release `v2.6`；`vv2.6` 统一按 `v2.6` 处理。
+- 本阶段验证通过后默认停留在本地验证完成状态；只有用户明确要求发布时，才 commit、push 到 GitHub、创建 tag 并 release，且 `vv2.6` 仅作为 `v2.6` 笔误处理。
 - PROJECT_SPEC 必须包含 Active Mission Snapshot，且 Hook 判断上下文必须优先使用该当前目标锚点。
 - 长任务书中的历史阶段、已完成任务和未来建议不得覆盖当前目标、当前阶段和当前任务。
 - Spec Steward 必须支持受控 section patch / task patch / phase summary patch，并避免因完整任务书过长导致合同更新悬挂或截断。
@@ -463,10 +510,20 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
 - human_review 必须按分类收窄，只有真实用户取舍、secret/credential、外部权限、受保护范围授权或不可消除歧义才能问用户。
 - 任务、报告、Hook 和 Spec Steward 状态必须支持语义归一化；等价状态不能阻塞合同更新。
 - novelcreatepilot 暴露出的长任务书和阶段推进问题必须有回归覆盖。
+- 用户明确授权临时维护受保护 Hook 文件时，SpecPilot 必须能生成一次性短时维护租约，并由 PreToolUse 精确消费。
+- PreToolUse 不得因为普通聊天授权而全局关闭；租约必须限定文件、次数、时效和原因。
+- Spec Steward runtime blocked 时必须能提出受控维护修复流，而不是要求用户手动关闭 hook。
+- Active Snapshot / Submission Requirements 与正式 GitHub policy 冲突时，Stop Hook 必须触发受控 policy reconciliation；只有凭据、外部环境或真实用户取舍缺失时才进入 human_review。
 - 判断体系文件不能被普通 Codex Worker 修改。
 - Hook 保持轻量，不引入复杂规则引擎、RAG、多 Agent、外层调度器、完整 GitHub 平台、CI 管理器、release platform、issue tracker、复杂流程编排或无限打磨机制。
 - `codex exec` 使用当前默认模型，不写死模型、profile 或 endpoint。
 - macOS 和 Windows 的路径与启动方式都有测试覆盖。
+- v3.0 自动化阶段过渡治理必须证明：TASK 完成后，若 `PROJECT_SPEC.md` 和 Development Plan 已明确下一步，Stop Hook / Spec Steward 能自动对齐当前阶段、当前 TASK、Development Plan 和 latest context，并继续推进，不再询问用户是否授权普通下一阶段。
+- 必须覆盖任务状态对账：当 Active Mission Snapshot、Development Plan、历史完成声明、完成报告、测试证据或 latest context 不一致时，Hook 优先执行证据核对和受控合同修复；只有真实不可消除歧义才进入 `human_review`。
+- 必须覆盖体验测评后续任务：完成前体验测评若发现明确高价值改进，应进入受控 Spec Steward section patch 并继续开发；若无明显问题或值得继续开发的改进点，才允许进入最终完成报告。
+- 必须覆盖普通对话轻量反馈：普通问答和非任务型交流应被记录为轻量反馈或轻量状态，不得误判为开发任务、合同变更或完成阻塞。
+- 必须保留 onboarding 例外：只有尚未形成完整 `PROJECT_SPEC.md` 且需求信息不足时，才允许反复向用户确认目标、范围、验收标准或 GitHub 同步策略。
+- v3.0 修改必须使用 section patch 或等价窄范围合同更新策略验证长任务书保真，确认 Active Mission Snapshot、Development Plan 后段任务、Submission Requirements、GitHub Sync Policy 和原始用户目标未被丢失。
 
 ## 10. Stop Conditions
 - AI 判断需求不清或需要用户决策时，进入 `human_review`；但普通工程卡点必须先尝试基于任务书、项目 Wiki、阶段目标和已有验证结果自解或重审阶段目标，不能直接把问题丢给用户。
@@ -484,9 +541,11 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
 - 下一步动作要求修改判断体系核心文件且当前不是 SpecPilot 自开发任务时，进入 `human_review`。
 - 任务书缺失或不完整且 onboarding 信息不足时，延期开发并继续需求澄清。
 - GitHub 同步策略缺失、含糊或与当前动作冲突时，保持 local-only 或进入 `human_review`。
+- 如果用户或 Active Mission Snapshot 已明确要求 GitHub 发布，但正式 GitHub policy 仍为 local-only 或不完整，应进入 `spec_update_required` / policy reconciliation，而不是普通 auto-continue 或无解释 human_review。
+- 维护租约缺失、过期、目标文件不匹配、次数耗尽或授权语义不明确时，PreToolUse 必须继续拦截受保护文件写入。
 - GitHub 凭据不可用、认证失败、远端不可访问或 GitHub 操作结果无法确认时，不得假装成功；应进入 `human_review` 或按策略降级为 local-only / sync environment-blocked。
 - 自动 push、tag、release 或仓库创建未被 PROJECT_SPEC 明确允许时，必须请求人工确认或进入 `human_review`。
-- `v2.6` 发布前如果验证失败、证据不足、工作树状态不清、远端不可确认或 release 操作失败，不得声称发布完成。
+- 如果进入发布流程，发布前若验证失败、证据不足、工作树状态不清、远端不可确认或 release 操作失败，不得声称发布完成。
 - 任何流程要求在项目文件中写入 API key、token、private key、密码或 credential secret 时，拒绝该写入并进入 `human_review`。
 - Hook 运行时升级检测到本地受管文件有无法安全合并的用户修改时，进入 `human_review`，不得覆盖用户内容。
 - 体验测评 Hook 无法真实使用或验证项目成果时，不得声称最终完成；应标记为 environment-blocked、code-ready 或进入 `human_review`。
@@ -494,13 +553,25 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
 - 体验测评发现只包含低价值、纯主观、非目标用户场景或与项目目标无关的建议时，不得转成新需求，应允许最终完成报告继续。
 - 体验测评循环反复提出低价值、主观、非目标场景或无法收敛的建议时，应过滤这些建议，并在达到循环限制时进入 `human_review`，不得无限打磨。
 - 长任务书导入或紧凑化无法保留必需章节、后段任务或提交要求时，不能假装判断完整；应进入受控修复或 `human_review`，不得基于残缺任务书宣告完成。
+- 不得因为 TASK 完成、阶段切换、下一任务选择、任务状态对账、体验测评后续任务或 Development Plan 衔接本身而停止等待用户确认；完整 `PROJECT_SPEC.md` 已存在且证据足够时，必须自动推进或进入受控合同修复。
+- 只有以下情况允许停止并请求用户：尚未形成完整 `PROJECT_SPEC.md` 的 onboarding 需求澄清；真实需要用户取舍；需要 secret 或外部账号动作；需要受保护范围授权；GitHub 发布/远端同步未获当前明确授权；存在无法通过 PROJECT_SPEC、wiki evidence、latest context 和代码事实消除的目标歧义。
+- 普通对话不得触发开发停止条件或新任务启动；Hook 应写入轻量反馈后保持当前任务合同不变，除非用户明确提出合同变更、开发请求、发布请求或受保护授权。
+
+## GitHub Sync Policy
+- Default policy remains local-only for ordinary work and future turns unless the user explicitly authorizes upload, sync, push, tag, or release again.
+- For this current turn only, the user explicitly authorizes completing the v3.0 GitHub release after validation.
+- Authorized GitHub account and repository: use the already-authenticated local GitHub CLI account `yunhaichu` for repository `yunhaichu/Codex-SpecPilot`.
+- Authorized current-turn release actions: commit the validated v3.0 changes, push `origin/main`, create annotated tag `v3.0`, and create GitHub release `v3.0`.
+- This authorization is not a general cloud default, not a standing permission for future releases, and not permission to store or expose credentials.
+- Do not request, write, print, or store any API key, token, private key, password, or credential secret. Use only the existing local authenticated GitHub CLI/session state.
+- If validation fails, repository identity does not match `yunhaichu/Codex-SpecPilot`, the authenticated account is not `yunhaichu`, the working tree contains unrelated or unsafe changes, or release/tag state conflicts cannot be resolved locally without user choice, stop and report the concrete blocker instead of publishing.
 
 ## 11. Submission Requirements
 - 受控 Spec Steward / onboarding / spec update 流程输出更新后的 `PROJECT_SPEC.md` 时，必须保留本文件的必需 heading，包括 `Project Mode`、`Project Goal`、`User Requirements`、`Non-Goals`、`Allowed Scope`、`Protected Scope`、`Active Mission Snapshot`、`Development Plan`、`Acceptance Criteria`、`Stop Conditions`、GitHub 相关策略内容和 `Submission Requirements`。
 - 如果用户未明确要求上传或同步，GitHub 策略必须保持 local-only/default safety，不得新增 GitHub 上传、推送、tag、release 或云默认。
-- 本阶段用户已明确要求开发完成并验证后发布 `v2.6`；因此最终提交要求包括 commit、push 到 GitHub、创建 tag `v2.6` 并发布 GitHub release `v2.6`。上下文中的 `vv2.6` 视为 `v2.6`。
-- 发布前必须运行基础验证和 TASK-023 要求的 novelcreatepilot 或等价真实受监督项目回归验证，并记录 direct evidence。
-- 发布前必须确认工作树状态、commit 内容、tag 名称、远端 push 状态和 release 状态；凭据不可用或远端不可确认时必须标记 sync environment-blocked 或进入 `human_review`，不得声称发布成功。
+- 本阶段当前提交要求是本地验证完成并保留发布前证据。若用户在当前回合明确要求发布，必须先通过受控 Spec Steward 对齐 GitHub Sync Policy、发布目标、tag/release 名称和自动操作权限；上下文中的 `vv2.6` 仅在该发布流程中视为 `v2.6`。
+- 若进入发布流程，发布前必须运行基础验证和 TASK-023 要求的 novelcreatepilot 或等价真实受监督项目回归验证，并记录 direct evidence。
+- 若进入发布流程，必须确认工作树状态、commit 内容、tag 名称、远端 push 状态和 release 状态；凭据不可用或远端不可确认时必须标记 sync environment-blocked 或进入 `human_review`，不得声称发布成功。
 - 更新任务合同时，只能编码用户已确认的变化；含糊、冲突或越过受保护范围的变化必须进入澄清或拒绝。
 - 更新 Development Plan 时，必须让剩余工作清晰可执行；过时工作应在 Notes 中标明，而不是删除重要历史约束。
 - 每次开发提交必须说明属于 code-ready、environment-blocked 还是 real-world verified。
@@ -515,6 +586,10 @@ Active Mission Snapshot、current goal anchor、Development Plan、GitHub policy
 - 不得请求、写入或暴露 API key、token、private key、密码或其他 credential secret。
 - 不得新增 RAG、多 Agent 平台、图数据库、外层调度器、云默认或复杂流程编排。
 - 普通 Codex Worker 不得绕过受控流程改写 `PROJECT_SPEC.md`、Active Mission Snapshot、Development Plan、GitHub policy 或相关 SpecPilot instruction/template 文件。
+- Protected maintenance lease 必须在完成报告或验证记录中说明授权来源、目标文件、消费状态、验证结果和是否自动失效。
+- GitHub policy reconciliation 必须说明冲突来源、最终 policy 状态和是否执行任何远端动作。
 - TASK-014 至 TASK-023 完成后必须说明 Active Mission Snapshot、section patch、证据对账、阶段合同草案、human_review 收窄、状态归一化和 novelcreatepilot 回归验证状态。
-- 完成 v2.6 发布前必须运行基础验证、提交本地变更、推送 GitHub、创建 `v2.6` tag，并发布 GitHub release；发布说明必须包含验证结果和体验测评状态。
+- 若用户明确要求发布新版本，发布前必须运行基础验证、提交本地变更、推送 GitHub、创建指定 tag，并发布 GitHub release；发布说明必须包含验证结果和体验测评状态。
 - 涉及长任务书目标锚定的提交必须说明历史阶段是否已压缩为摘要，以及当前目标是否仍清晰。
+- For the current-turn v3.0 release, the final report must include: validation commands and results, confirmed GitHub account `yunhaichu`, confirmed repository `yunhaichu/Codex-SpecPilot`, commit hash, pushed branch `origin/main`, annotated tag `v3.0`, GitHub release `v3.0` URL or identifier, and confirmation that no secret was requested, written, printed, or stored.
+- If the release cannot be completed, report the exact blocker and the last safe completed step; do not fabricate publication status.

@@ -71,6 +71,23 @@ Classify blockers narrowly:
 Only `user_decision`, `external_environment`, and `unsafe/protected_scope`
 normally justify `human_review`.
 
+## Protected Maintenance Authorization Rule
+If Hook runtime maintenance is needed for protected files, do not ask the user to
+manually disable PreToolUse or manually edit the protected files.
+
+Instead:
+
+1. State the exact maintenance target files.
+2. Ask for a one-shot protected maintenance authorization.
+3. If the user replies `同意`, `允许`, `可以`, `yes`, `ok`, or equivalent approval,
+   UserPromptSubmit creates a short-lived lease.
+4. PreToolUse may consume the lease once, only for the listed maintenance files.
+5. After consumption or expiry, protection returns automatically.
+
+The lease must not cover `.project_wiki/PROJECT_SPEC.md`, judge logs, loop
+state, secrets, or a patch that mixes maintenance files with unrelated business
+files. Task-contract changes still go through the controlled Spec Steward flow.
+
 ## Goal Change Rule
 Users may change project goals during development. When the current user prompt
 changes the project goal, scope, priority, acceptance criteria, or Development
@@ -86,7 +103,11 @@ Plan:
 The Stop Hook should treat this as `spec_update_required`, not as normal
 `continue`. If information is sufficient, the controlled Spec Steward /
 onboarding / spec update flow should write the updated task contract directly.
-If information is insufficient, it asks only the minimum clarifying questions.
+If information is insufficient after a complete PROJECT_SPEC already exists,
+Codex must first use wiki facts, latest context, evidence, and current goal to
+resolve the gap or narrow the plan automatically. Repeated user confirmation is
+allowed only during initial project creation/onboarding before the task contract
+is complete.
 After the task contract is updated by the controlled spec-update flow, Codex
 Worker resumes from the new Development Plan.
 
@@ -98,6 +119,22 @@ permission for Spec Steward to apply the previously summarized change.
 If the user rejects the summarized change or uses ambiguous confirmation
 wording, do not apply the task contract update; ask only the minimum
 confirmation or replacement-change question.
+
+## Automatic Phase Transition Rule
+When a phase, TASK range, completion report, experience evaluation, evidence
+reconciliation, or Development Plan segment is complete, do not ask the user to
+confirm the next phase. The Stop Hook should route the transition through
+controlled Spec Steward automatically, update the task contract or plan from
+available project facts, and then continue Worker development.
+
+Only initial task-contract creation may repeatedly ask the user to confirm
+requirements and goals. After PROJECT_SPEC is complete, user prompts and
+confirmed goals are the highest instruction source, but phase planning,
+status reconciliation, and next-task activation are automatic unless they need
+secrets, external environment actions, or unsafe/protected-scope authorization.
+
+For normal conversation prompts, the Hook must still record a lightweight pass
+judgment and avoid starting the full task loop.
 
 ## GitHub Sync Rule
 SpecPilot defaults to local-only development unless PROJECT_SPEC explicitly
@@ -120,6 +157,11 @@ policy, visibility, marker nodes, allowed automatic operations, and available
 credentials. If credentials are unavailable or a push/tag/release/repository
 creation requires human confirmation, fail safe to `human_review` instead of
 pretending the sync succeeded.
+
+If the Active Mission Snapshot or Submission Requirements already records a
+current GitHub sync/release authorization but the formal GitHub Sync Policy is
+still local-only or incomplete, route to controlled `spec_update_required`
+policy reconciliation before any remote operation.
 
 ## Long Task Book Rule
 `PROJECT_SPEC.md` may be long. Do not ask the user to manually shorten,

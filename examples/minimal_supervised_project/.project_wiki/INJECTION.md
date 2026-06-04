@@ -11,15 +11,82 @@ control until the task is complete or a real human decision is required.
 When working under SpecPilot:
 
 1. Read `.project_wiki/PROJECT_SPEC.md`.
-2. Find the first incomplete `TASK-*` in Development Plan.
-3. Work only on the current task.
-4. At the end of the turn, report:
+2. Read Active Mission Snapshot as the current-goal anchor before historical summaries.
+3. Find the first incomplete `TASK-*` in the current Development Plan range.
+4. Work only on the current task.
+5. At the end of the turn, report:
    - current task id;
    - files changed;
    - validation performed;
    - whether the task is done;
    - what should happen next.
-5. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
+6. Let the Stop Hook judge whether to continue, revise, finish, or request human review.
+
+## Active Mission Snapshot Rule
+Long task books must keep an Active Mission Snapshot near the front of
+`PROJECT_SPEC.md`. Treat it as the current-goal anchor for:
+
+- current goal and current phase;
+- current `TASK-*` range;
+- current acceptance focus;
+- current non-goals;
+- release or GitHub sync target;
+- context priority.
+
+If historical summaries, completed phases, old task reports, or previous
+completion claims conflict with the Active Mission Snapshot, use the snapshot
+first. The correct response is a concrete revise step, evidence reconciliation,
+or controlled `spec_update_required` when the task contract itself needs to
+change.
+
+## Blocker Self-Recovery Rule
+When development hits an implementation, test, dependency, planning, or stage
+progress problem, do not default to handing the problem to the user.
+
+Use the existing `.project_wiki` facts, PROJECT_SPEC, latest context, current
+goal, stage goal, validation output, and changed files to choose the next
+recovery step. Prefer one of these outcomes:
+
+- continue with a concrete investigation, fix, or validation step;
+- revise the implementation approach;
+- re-check whether the current stage goal or Development Plan assumption is
+  wrong, then propose a controlled `spec_update_required` change if the task
+  contract needs to move.
+
+Use `human_review` only when the blocker truly needs user judgment, secrets or
+credentials, external environment action, protected-scope authorization, a
+scope choice, or an ambiguity Codex cannot resolve from the task book and wiki
+facts.
+
+Classify blockers narrowly:
+
+- `engineering_recovery`: investigate, fix, rerun validation;
+- `evidence_reconciliation`: compare reports, tests, completion claims, and task status;
+- `status_reconciliation`: normalize status aliases and repair inconsistent state;
+- `contract_update`: use controlled Spec Steward;
+- `user_decision`: stop for the user;
+- `external_environment`: stop for environment or credential action;
+- `unsafe/protected_scope`: stop unless explicitly authorized.
+
+Only `user_decision`, `external_environment`, and `unsafe/protected_scope`
+normally justify `human_review`.
+
+## Protected Maintenance Authorization Rule
+If Hook runtime maintenance is needed for protected files, do not ask the user to
+manually disable PreToolUse or manually edit the protected files.
+
+Instead:
+
+1. State the exact maintenance target files.
+2. Ask for a one-shot protected maintenance authorization.
+3. If the user replies `同意`, `允许`, `可以`, `yes`, `ok`, or equivalent approval,
+   UserPromptSubmit creates a short-lived lease.
+4. PreToolUse may consume the lease once, only for the listed maintenance files.
+5. After consumption or expiry, protection returns automatically.
+
+The lease must not cover `.project_wiki/PROJECT_SPEC.md`, judge logs, loop
+state, secrets, or a patch that mixes maintenance files with unrelated business
+files. Task-contract changes still go through the controlled Spec Steward flow.
 
 ## Goal Change Rule
 Users may change project goals during development. When the current user prompt
@@ -45,25 +112,50 @@ The controlled writer is the Spec Steward flow. It may update
 When latest context is already `spec_update_required` and the user replies
 `同意`, `yes`, `ok`, `apply`, or an equivalent confirmation, treat that as
 permission for Spec Steward to apply the previously summarized change.
+If the user rejects the summarized change or uses ambiguous confirmation
+wording, do not apply the task contract update; ask only the minimum
+confirmation or replacement-change question.
 
 ## GitHub Sync Rule
 SpecPilot defaults to local-only development unless PROJECT_SPEC explicitly
 enables GitHub sync.
 
 During onboarding, ask whether the user wants GitHub upload/sync. If not,
-record local-only. If yes, ask for auth method, repository owner/name, public
-or private visibility, and allowed push/tag/checkpoint behavior. Do not ask the
-user to paste API keys, tokens, or secrets into the project.
+record local-only. If yes, ask for GitHub account, auth method, credential
+availability, repository owner/name, public or private visibility, whether a
+new repository may be created or an existing repository must be used, marker
+nodes, and allowed automatic operations versus human confirmation. Do not ask
+the user to paste API keys, tokens, or secrets into the project.
 
 During development, the Stop Hook may decide that a development node needs a
 local checkpoint, GitHub sync, tag, or other mark, but only within the GitHub
 policy recorded in PROJECT_SPEC. If the policy is missing or local-only, do not
 request remote push, remote tag, repository creation, or remote changes.
 Remote GitHub actions require a complete non-secret policy with auth method
-description, repository target, visibility, allowed automatic operations, and
-available credentials. If credentials are unavailable or a push/tag/release
-requires human confirmation, fail safe to `human_review` instead of pretending
-the sync succeeded.
+description, GitHub account, repository target, existing-vs-new repository
+policy, visibility, marker nodes, allowed automatic operations, and available
+credentials. If credentials are unavailable or a push/tag/release/repository
+creation requires human confirmation, fail safe to `human_review` instead of
+pretending the sync succeeded.
+
+If the Active Mission Snapshot or Submission Requirements already records a
+current GitHub sync/release authorization but the formal GitHub Sync Policy is
+still local-only or incomplete, route to controlled `spec_update_required`
+policy reconciliation before any remote operation.
+
+## Long Task Book Rule
+`PROJECT_SPEC.md` may be long. Do not ask the user to manually shorten,
+split, or rewrite the task book to fit a Hook prompt.
+
+Hooks should use compact key-section context or section head/tail preservation
+so Active Mission Snapshot, Project Goal, User Requirements, Non-Goals, Allowed
+Scope, Protected Scope, Development Plan, Acceptance Criteria, Stop Conditions,
+GitHub policy, and Submission Requirements remain visible, including late
+Development Plan tasks.
+
+Do not perform full task-book rewrites when a section-level update is enough.
+Use the controlled Spec Steward / section patch flow so long contracts keep
+their current snapshot, late tasks, GitHub policy, and submission requirements.
 
 ## Start Work Rule
 When the user says `开始工作`:
@@ -72,7 +164,9 @@ When the user says `开始工作`:
 2. Start the first incomplete Development Plan item.
 3. Do not wait for the user between normal development steps.
 4. Make progress in small, verifiable steps.
-5. Stop only when the task is done, blocked by environment, or needs real user judgment.
+5. If blocked, first investigate, revise, validate, or re-check the stage plan
+   using task-book and wiki facts.
+6. Stop only when the task is done, blocked by environment, or needs real user judgment.
 
 ## End Work Rule
 When all Acceptance Criteria are satisfied:

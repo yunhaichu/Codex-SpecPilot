@@ -21,7 +21,7 @@ PROJECT_SPEC_PATH = os.path.join(WIKI_DIR, "PROJECT_SPEC.md")
 LATEST_CONTEXT_PATH = os.path.join(WIKI_DIR, "latest_context.md")
 
 VALID_DECISIONS = ("apply", "needs_user_confirmation", "reject")
-MAX_PROJECT_SPEC_PROMPT_CHARS = 50000
+MAX_PROJECT_SPEC_PROMPT_CHARS = 24000
 MAX_LATEST_CONTEXT_PROMPT_CHARS = 6000
 MAX_CHANGE_REQUEST_PROMPT_CHARS = 8000
 REQUIRED_SPEC_TERMS = (
@@ -38,18 +38,18 @@ REQUIRED_SPEC_TERMS = (
     "GitHub",
 )
 PROJECT_SPEC_PROMPT_SECTIONS = (
-    ("Active Mission Snapshot", "Active Mission Snapshot", ("Project Mode", "0. Project Mode", "1. Project Goal"), 2.4),
-    ("Project Mode", "0. Project Mode", ("1. Project Goal",), 0.4),
-    ("Project Goal", "1. Project Goal", ("2. Background",), 1.1),
-    ("User Requirements", "3. User Requirements", ("4. Non-Goals",), 1.4),
-    ("Non-Goals", "4. Non-Goals", ("5. Allowed Scope",), 0.8),
-    ("Allowed Scope", "5. Allowed Scope", ("6. Protected Scope",), 0.8),
-    ("Protected Scope", "6. Protected Scope", ("7. Development Plan",), 1.0),
-    ("Development Plan", "7. Development Plan", ("8. Acceptance Criteria",), 3.6),
-    ("Acceptance Criteria", "8. Acceptance Criteria", ("9. Stop Conditions",), 1.4),
-    ("Stop Conditions", "9. Stop Conditions", ("GitHub Sync Policy", "10. Submission Requirements"), 1.2),
-    ("GitHub Sync Policy", "GitHub Sync Policy", ("10. Submission Requirements",), 1.0),
-    ("Submission Requirements", "10. Submission Requirements", (), 1.2),
+    ("Active Mission Snapshot", "Active Mission Snapshot", ("Project Mode", "Project Goal"), 2.4),
+    ("Project Mode", "Project Mode", ("Project Goal",), 0.4),
+    ("Project Goal", "Project Goal", ("Background",), 1.1),
+    ("User Requirements", "User Requirements", ("Reader Perspective Requirements", "Non-Goals"), 1.4),
+    ("Non-Goals", "Non-Goals", ("Allowed Scope",), 0.8),
+    ("Allowed Scope", "Allowed Scope", ("Protected Scope",), 0.8),
+    ("Protected Scope", "Protected Scope", ("Development Plan",), 1.0),
+    ("Development Plan", "Development Plan", ("Acceptance Criteria",), 3.6),
+    ("Acceptance Criteria", "Acceptance Criteria", ("Stop Conditions",), 1.4),
+    ("Stop Conditions", "Stop Conditions", ("Submission Requirements", "GitHub Sync Policy"), 1.2),
+    ("GitHub Sync Policy", "GitHub Sync Policy", ("Submission Requirements",), 1.0),
+    ("Submission Requirements", "Submission Requirements", (), 1.2),
 )
 CONFIRMATION_TERMS = {
     "同意",
@@ -307,6 +307,33 @@ def validate_project_spec(text):
     return missing
 
 
+def _task_ids(text):
+    return set(re.findall(r"\bTASK-\d+\b", text or "", flags=re.IGNORECASE))
+
+
+def validate_task_preservation(current_spec, updated_spec, change_request=""):
+    """Reject silent loss of existing task ids during contract updates."""
+    current_tasks = _task_ids(current_spec)
+    if not current_tasks:
+        return []
+    updated_tasks = _task_ids(updated_spec)
+    missing = sorted(current_tasks - updated_tasks)
+    if not missing:
+        return []
+    lower_request = (change_request or "").lower()
+    explicit_removal_terms = (
+        "delete task",
+        "remove task",
+        "drop task",
+        "删除任务",
+        "移除任务",
+        "删掉任务",
+    )
+    if any(term in lower_request for term in explicit_removal_terms):
+        return []
+    return ["dropped existing task id: %s" % task for task in missing[:10]]
+
+
 def build_spec_update_prompt(change_request, current_spec, latest_context=""):
     current_spec_context = compact_project_spec_for_prompt(
         current_spec,
@@ -319,11 +346,21 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "\"reason\":\"brief\","
         "\"questions\":[\"question\"],"
         "\"update_summary\":\"brief\","
-        "\"updated_project_spec\":\"full markdown PROJECT_SPEC or empty\"}\n"
+        "\"updated_project_spec\":\"full markdown PROJECT_SPEC or empty\","
+        "\"project_spec_patches\":[{\"op\":\"replace|append\","
+        "\"heading\":\"section heading\","
+        "\"content\":\"markdown section or addition\"}]}\n"
         "Rules:\n"
         "- Only encode the user's confirmed change request.\n"
         "- If the user provided a modification suggestion and the requested contract "
         "change is clear enough, apply it directly through this controlled flow.\n"
+        "- After a complete PROJECT_SPEC exists, do not ask the user to confirm "
+        "phase transitions, next-task activation, status reconciliation, "
+        "experience-evaluation follow-up, or Development Plan carry-over. Resolve "
+        "those from PROJECT_SPEC, latest context, wiki evidence, and the current "
+        "goal, and prefer a narrow section patch.\n"
+        "- Repeated user questions are reserved for initial onboarding before a "
+        "complete PROJECT_SPEC can be written.\n"
         "- If the user only replied with an approval such as 同意, yes, ok, or apply, "
         "treat it as confirmation of the spec_update_required change in latest context.\n"
         "- If the user clearly rejects the summarized change, do not apply it. "
@@ -336,11 +373,17 @@ def build_spec_update_prompt(change_request, current_spec, latest_context=""):
         "- If CURRENT PROJECT_SPEC is compacted for prompt length, preserve the "
         "visible required sections, late Development Plan items, and Submission "
         "Requirements; do not drop them because they appear late in the task book.\n"
+        "- Prefer project_spec_patches for surgical updates to a long PROJECT_SPEC; "
+        "use updated_project_spec only when the whole file genuinely needs rewriting.\n"
+        "- For project_spec_patches replace operations, content must include the complete "
+        "replacement markdown section with its heading. For append operations, content "
+        "should be only the addition to append inside that section.\n"
         "- Never request, write, or expose API keys, tokens, or secrets.\n"
         "- Update Development Plan so remaining work is clear; mark obsolete work in Notes if needed.\n"
         "- Do not add RAG, multi-agent platforms, graph memory, external schedulers, or cloud defaults.\n"
         "- Do not output code fences.\n"
-        "- If decision is apply, updated_project_spec must be the complete PROJECT_SPEC markdown.\n\n"
+        "- If decision is apply, provide either updated_project_spec as complete PROJECT_SPEC "
+        "markdown or non-empty project_spec_patches that can be applied locally.\n\n"
         "CURRENT PROJECT_SPEC:\n```\n%s\n```\n\n"
         "LATEST CONTEXT:\n```\n%s\n```\n\n"
         "USER CHANGE REQUEST:\n```\n%s\n```\n"
@@ -373,12 +416,28 @@ def propose_spec_update(change_request, apply_update=False):
     prompt = build_spec_update_prompt(change_request, current_spec, latest_context)
     llm_result = call_codex_default(prompt, timeout=120)
     if not llm_result.get("ok"):
+        maintenance_targets = [
+            "hooks/codex_client.py",
+            "hooks/spec_steward.py",
+            "tests/smoke_test.py",
+        ]
         return {
-            "ok": False,
+            "ok": True,
             "applied": False,
-            "decision": "reject",
-            "reason": "Spec Steward AI call failed.",
+            "decision": "maintenance_authorization_required",
+            "reason": (
+                "Spec Steward runtime AI call failed; protected runtime "
+                "maintenance may be required before the controlled contract "
+                "update can proceed."
+            ),
             "error": llm_result.get("error", "unknown error"),
+            "maintenance_targets": maintenance_targets,
+            "questions": [
+                (
+                    "是否允许一次性受保护维护这些文件：%s？同意后 Hook 会生成短时一次性租约，"
+                    "只放行这些目标文件，消费后自动失效。"
+                ) % ", ".join(maintenance_targets)
+            ],
         }
 
     parsed = _parse_llm_response(llm_result.get("content", ""))
@@ -413,6 +472,11 @@ def propose_spec_update(change_request, apply_update=False):
         return response
 
     updated_spec = parsed.get("updated_project_spec", "")
+    patches = parsed.get("project_spec_patches", [])
+    if not updated_spec and patches:
+        updated_spec = apply_project_spec_section_patch(current_spec, patches)
+        response["project_spec_patches"] = patches
+        response["patch_count"] = len(patches)
     missing = validate_project_spec(updated_spec)
     if missing:
         response.update({
@@ -420,6 +484,19 @@ def propose_spec_update(change_request, apply_update=False):
             "decision": "reject",
             "reason": "Proposed PROJECT_SPEC is missing required content.",
             "missing": missing,
+        })
+        return response
+    task_preservation_missing = validate_task_preservation(
+        current_spec,
+        updated_spec,
+        change_request=change_request,
+    )
+    if task_preservation_missing:
+        response.update({
+            "ok": False,
+            "decision": "reject",
+            "reason": "Proposed PROJECT_SPEC drops existing task ids.",
+            "missing": task_preservation_missing,
         })
         return response
 
